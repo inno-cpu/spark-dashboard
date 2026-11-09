@@ -20,6 +20,7 @@ import type { TimeWindow } from '@/types/events'
 import { EditModeBar, type Refusal } from './EditModeBar'
 import { EngineRotationControl } from './EngineRotationControl'
 import { PageConfig } from './PageConfig'
+import { PageTargetSelector } from './PageTargetSelector'
 import { PanelSettings } from './PanelSettings'
 import { isNarrow } from './breakpoint'
 import { GridPage, type GridEditing, type PanelChrome } from './GridPage'
@@ -237,6 +238,7 @@ export function GridPageEditor({
             narrow={narrow}
             refused={refused}
             rotation={<EngineRotationControl />}
+            targetSelector={<PageTargetSelector />}
             pageConfig={
               onChangeSource && (
                 <PageConfig source={page.source} readOnly={readOnly} onChange={onChangeSource} />

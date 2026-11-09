@@ -15,6 +15,14 @@ export const NVIDIA_THEME = {
   gaugeTrack: '#222226',
 } as const
 
+// Guard thresholds shown by the GPU panels. One source of truth for the numbers the
+// safety services enforce; they move here instead of being repeated per component.
+export const GUARD = {
+  coreTemp: { warning: 78, critical: 83 },
+  hbmTemp: { warning: 82, critical: 90 },
+  powerLimitWatts: 180,
+} as const
+
 export const THRESHOLDS = {
   gpuTemp: { warning: 70, critical: 85 },
   gpuPower: { warning: 80, critical: 95 },

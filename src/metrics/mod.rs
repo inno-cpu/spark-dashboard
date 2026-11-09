@@ -129,7 +129,15 @@ pub async fn metrics_collector(
         let mut engines = engine_state.read().await.clone();
         let device_pids = gpu::collect_device_pids(&devices);
         for engine in &mut engines {
-            engine.gpu_indexes = gpu::gpu_indexes_for_pids(&engine.pids, &device_pids);
+            let attributed = gpu::gpu_indexes_for_pids(&engine.pids, &device_pids);
+            // A discovered engine is a virtual endpoint: it has no PID, so
+            // NVML can attribute nothing to it. Only then does the
+            // provider's own answer stand — a real PID match always wins.
+            engine.gpu_indexes = if attributed.is_empty() {
+                engine.gpu_index_hint.map(|index| vec![index]).unwrap_or_default()
+            } else {
+                attributed
+            };
         }
 
         let mut gpu_events = gpu::detect_gpu_events(&devices, timestamp_ms);

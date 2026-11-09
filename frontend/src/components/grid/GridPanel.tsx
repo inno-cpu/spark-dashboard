@@ -2,6 +2,7 @@ import { Settings2, X } from 'lucide-react'
 import { useState } from 'react'
 import { isKnownPanelType } from '@/lib/dashboard/panels'
 import { panelTitle, type DashboardPanel } from '@/lib/dashboard/schema'
+import { formatGpuName } from '@/lib/modelIdentity'
 import { PanelDeviceContext } from './panelDevice'
 import { renderPanelContent } from './panelRegistry'
 
@@ -33,7 +34,7 @@ export function GridPanel({
   onConfigure?: () => void
   onRemove?: () => void
 }) {
-  const title = panelTitle(panel)
+  const title = formatGpuName(panelTitle(panel))
   // Reported up by the content, which is the only thing that knows what its
   // binding resolved to — see `panelDevice`.
   const [device, setDevice] = useState<string | null>(null)
@@ -45,8 +46,15 @@ export function GridPanel({
         editing ? 'cursor-move select-none' : ''
       } ${editing ? (configuring ? 'border-[#76B900]' : 'border-[#76B900]/40') : 'border-white/[0.04]'}`}
     >
-      <div className="shrink-0 flex items-center gap-1">
+      <div className="shrink-0 relative flex items-center gap-1">
         <h3 className="shrink-0 text-[11px] font-semibold text-zinc-200 truncate">{title}</h3>
+        {/* Edit mode only: the type id, centred, so a card can be identified while
+            rearranging without opening its settings. */}
+        {editing && (
+          <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] text-[#76B900]">
+            {panel.type}
+          </span>
+        )}
         {/* The hardware, beside the name of the metric — the title never gives
             up room for it, and it truncates away to nothing on a panel too
             narrow to hold both. The separator sits inside the span so the two

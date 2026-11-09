@@ -22,6 +22,8 @@ export type PanelBindingKind =
   | 'gpu'
   /** One inference engine, identified by its endpoint. */
   | 'engine'
+  /** One router backend, identified by the name the router reports. */
+  | 'backend'
   /** Nothing — the panel covers the whole host, or every engine at once. */
   | 'none'
 
@@ -64,6 +66,63 @@ export const DEFAULT_PANEL_SIZE: PanelSize = { w: 3, h: 3 }
  */
 export const PANEL_TYPES = {
   // ── Per-GPU hardware ────────────────────────────────────────────────────
+  // A whole card for one GPU: the composite an operator puts four of on a page.
+  // Binds like every other hardware panel, so the native Source selector points
+  // it at a card and a template can bind it too.
+  'gpu-overview': { binds: 'gpu', title: 'GPU Overview', windowed: false },
+  // Temperature, fan and power for one card: the cooling question, not the
+  // utilisation question.
+  'gpu-cooling': { binds: 'gpu', title: 'GPU Cooling', windowed: false },
+
+  // ── Host cooling and protection ─────────────────────────────────────────
+  // Data the GPU collector cannot see: the IPMI fan tachometers and the thermal
+  // guard's latch. Served by this dashboard, not by a plugin.
+  'fan-tach': { binds: 'none', title: 'Fan Tachometer', windowed: false },
+  'protection-status': { binds: 'none', title: 'Protection', windowed: false },
+  'c80-watchdog': { binds: 'none', title: 'C.80 Watchdog', windowed: false },
+  'thermal-guard': { binds: 'none', title: 'Thermal Guard', windowed: false },
+
+  // ── Routing ─────────────────────────────────────────────────────────────
+  // The router is read-only here: it owns routing, this shows its state.
+  'router-backends': { binds: 'none', title: 'Router Backends', windowed: false },
+  'router-traffic': { binds: 'none', title: 'Router Traffic', windowed: false },
+  // One backend per panel, pinned through the native Source selector.
+  // `binds: 'backend'` is what makes that control offer router backends.
+  'router-backend': { binds: 'backend', title: 'Router Backend', windowed: false },
+  'router-summary': { binds: 'none', title: 'Router Summary', windowed: false },
+  // Follows the page target (GPU or all models); no panel binding of its own.
+  'router-tokens': { binds: 'none', title: 'Decode Throughput', windowed: true },
+  'router-kv': { binds: 'none', title: 'KV Cache Usage', windowed: true },
+  'model-inventory': { binds: 'none', title: 'Loaded Models', windowed: false },
+  'model-profiles': { binds: 'none', title: 'Model Profiles', windowed: false },
+  // Every GPU at once; binds nothing because it is not about one card.
+  'gpu-fleet': { binds: 'none', title: 'GPU Fleet', windowed: false },
+  'service-health': { binds: 'none', title: 'Service Health', windowed: false },
+  'endpoints': { binds: 'none', title: 'Endpoints', windowed: false },
+  'client-access': { binds: 'none', title: 'Client Access', windowed: false },
+  'engine-key': { binds: 'none', title: 'Engine Key', windowed: false },
+  'gateway-config': { binds: 'none', title: 'Gateway Config', windowed: false },
+  'gateway-requests': { binds: 'none', title: 'API Requests', windowed: false },
+  'safety-status': { binds: 'none', title: 'Safety Status', windowed: false },
+  'router-defaults': { binds: 'none', title: 'Router Defaults', windowed: false },
+  'router-messages': { binds: 'none', title: 'Router Messages', windowed: false },
+  'netdata-alarms': { binds: 'none', title: 'Netdata Alarms', windowed: false },
+  'host-ownership': { binds: 'none', title: 'GPU Ownership', windowed: false },
+  'audit-log': { binds: 'none', title: 'Change Audit', windowed: false },
+  'journal-tail': { binds: 'none', title: 'Unit Journal', windowed: false },
+  // Cooling facts NVML does not carry: smfc zone arbitration and the HBM/fan
+  // sensors Netdata publishes.
+  'cooling-status': { binds: 'none', title: 'Cooling Status', windowed: false },
+  'cooling-summary': { binds: 'none', title: 'Cooling Summary', windowed: false },
+  'fan-duty': { binds: 'none', title: 'Fan Duty', windowed: false },
+  'hbm-history': { binds: 'none', title: 'HBM Temperature', windowed: true },
+  'fan-history': { binds: 'none', title: 'Fan History', windowed: true },
+  'chassis-temp': { binds: 'none', title: 'Chassis Temperature', windowed: true },
+  'gpu-power-history': { binds: 'none', title: 'GPU Power History', windowed: true },
+  'duty-history': { binds: 'none', title: 'Fan Duty History', windowed: true },
+  'inlet-history': { binds: 'none', title: 'Inlet History', windowed: true },
+
+
   'gpu-utilization': { binds: 'gpu', title: 'GPU Utilization' },
   'gpu-temperature': { binds: 'gpu', title: 'GPU Temp' },
   'gpu-power': { binds: 'gpu', title: 'GPU Power' },
@@ -146,6 +205,17 @@ export const PANEL_TYPES = {
   // other engine panel instead of being a fixed drawer. A line of container
   // output is long, and a tail has no window to cover.
   logs: { binds: 'engine', title: 'Logs', size: { w: 6, h: 4 }, windowed: false },
+
+  // ── Generic plugin panels ───────────────────────────────────────────────
+  // Built into the host once, configured by a plugin template through the
+  // panel's `config`: no per-plugin React component, and nothing here knows
+  // what any particular plugin is for. They bind to nothing themselves — the
+  // config names the plugin whose backend they talk to.
+  'plugin-status': { binds: 'none', title: 'Plugin Status', windowed: false },
+  'plugin-metric': { binds: 'none', title: 'Plugin Metric', windowed: false },
+  'plugin-table': { binds: 'none', title: 'Plugin Table', windowed: false },
+  'plugin-action': { binds: 'none', title: 'Plugin Action', windowed: false },
+  'plugin-log': { binds: 'none', title: 'Plugin Events', windowed: false },
 } as const satisfies Record<string, PanelTypeSpec>
 
 /** A panel type this build implements. */

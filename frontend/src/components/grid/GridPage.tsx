@@ -25,7 +25,9 @@ import { GridPanel } from './GridPanel'
  * this is also what every unit test runs on; the number itself is arbitrary
  * because fit-to-viewport replaces it on the first ResizeObserver tick.
  */
-const FALLBACK_CELL_HEIGHT = 80
+// 96 px keeps a three-row card readable and, unlike measured/12, cannot be pulled
+// down by the content height it is itself producing.
+const FALLBACK_CELL_HEIGHT = 96
 
 /**
  * The row cap outside an edit session: high enough to be no cap at all.
@@ -109,7 +111,19 @@ export function GridPage({
   const [containerRef, { width, height }] = useElementSize<HTMLDivElement>()
   const measured = height > 0
   const narrow = isNarrow(width)
-  const cellHeight = measured ? Math.floor(height / GRID_MAX_ROWS) : FALLBACK_CELL_HEIGHT
+  const cellHeight = FALLBACK_CELL_HEIGHT
+
+  // A page that has reached the bottom of the fixed grid should grow, not refuse
+  // the next panel. `contentRows` is the last used row; a page that fills the
+  // viewport gets a buffer of empty rows below it, and edit mode is allowed to
+  // drop there. A page that still fits keeps exactly the old geometry.
+  const contentRows = page.panels.reduce(
+    (lowest, panel) => Math.max(lowest, panel.geometry.y + panel.geometry.h),
+    0,
+  )
+  const filled = contentRows >= GRID_MAX_ROWS
+  const maxRows = filled ? contentRows + 9 : GRID_MAX_ROWS
+
   // A session survives the window narrowing, but nothing may be rearranged
   // while it does: the collapsed column is derived from the layout being
   // edited, so a drag there would author cells in a grid one column wide.
@@ -174,7 +188,7 @@ export function GridPage({
       // A number, not undefined — `updateOptions` ignores an absent maxRow, so
       // leaving edit mode has to say the cap is gone in as many words — and not
       // zero, which it would read as a cap of none; see `UNCAPPED_ROWS`.
-      maxRow: draggable ? GRID_MAX_ROWS : UNCAPPED_ROWS,
+      maxRow: draggable ? maxRows : UNCAPPED_ROWS,
       cellHeight,
       margin: 3,
       // Authored gaps are authored. Without floating, the engine compacts
@@ -188,7 +202,7 @@ export function GridPage({
       // be seen collapsing, and every panel would then grow into its row height.
       animate: animated,
     }),
-    [animated, cellHeight, collapsible, draggable],
+    [animated, cellHeight, collapsible, draggable, maxRows],
   )
 
   // The gesture under way: what it is doing, where the panel started, and where
@@ -259,7 +273,7 @@ export function GridPage({
       // it must hold anywhere the component renders — including the browser
       // test project, which runs no Tailwind build.
       style={{ height: '100%' }}
-      className={`min-h-0 ${narrow ? 'overflow-y-auto' : 'overflow-hidden'}`}
+      className="min-h-0 overflow-y-auto"
     >
       {/* No page selection of its own: the editor around the grid provides it,
           so every following panel here and the edit bar's engine rotation

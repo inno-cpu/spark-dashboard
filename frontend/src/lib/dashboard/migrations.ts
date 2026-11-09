@@ -57,8 +57,19 @@ const addPageSource: DashboardMigration = {
  * Adding a migration means appending it here, bumping
  * `DASHBOARD_SCHEMA_VERSION`, and adding a fixture to `migrations.test.ts`.
  */
+/**
+ * v2 → v3: the optional per-panel `config` arrived. Additive — every existing
+ * panel has no config and keeps having none — so nothing is rewritten and the
+ * runner stamps the version. The document is only persisted on a save the
+ * operator asked for, never by being read.
+ */
+const addPanelConfig: DashboardMigration = {
+  from: 2,
+  migrate: (document) => ({ ...document }),
+}
+
 export const DASHBOARD_MIGRATION_PATH: MigrationPath = {
-  migrations: [addPageSource],
+  migrations: [addPageSource, addPanelConfig],
   target: DASHBOARD_SCHEMA_VERSION,
 }
 

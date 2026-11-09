@@ -38,8 +38,10 @@ import { TIME_WINDOW_SECONDS, type TimeWindow } from '@/types/events'
  * is what makes rolling the dashboard back recoverable.
  *
  * - v2 added the optional per-page `source` (`lib/dashboard/pageSource`).
+ * - v3 added the optional per-panel `config`, which is how a generic plugin
+ *   panel carries what it points at without a React component per plugin.
  */
-export const DASHBOARD_SCHEMA_VERSION = 2
+export const DASHBOARD_SCHEMA_VERSION = 3
 
 /** Time window a panel's chart covers when the operator has not chosen one. */
 export const DEFAULT_TIME_WINDOW: TimeWindow = '5m'
@@ -81,6 +83,12 @@ export interface DashboardPanel {
   geometry: PanelGeometry
   binding: PanelBinding
   window: TimeWindow
+  /**
+   * Configuration a generic plugin panel reads at render time: which plugin,
+   * which backend path, which fields. Absent on every native panel, and absent
+   * rather than empty so the document says what it means.
+   */
+  config?: Record<string, unknown>
 }
 
 /**
@@ -142,6 +150,7 @@ export function serializeDashboardDocument(document: DashboardDocument): string 
         },
         binding: panel.binding,
         window: panel.window,
+        ...(panel.config === undefined ? {} : { config: panel.config }),
       })),
     })),
   })
@@ -166,6 +175,7 @@ function readPage(raw: Record<string, unknown>): DashboardPage {
 
 function readPanel(raw: Record<string, unknown>): DashboardPanel {
   const title = readText(raw.title)
+  const config = isRecord(raw.config) ? raw.config : undefined
 
   return {
     id: readId(raw.id),
@@ -174,6 +184,7 @@ function readPanel(raw: Record<string, unknown>): DashboardPanel {
     geometry: readGeometry(raw.geometry),
     binding: readBinding(raw.binding),
     window: readWindow(raw.window),
+    ...(config === undefined ? {} : { config }),
   }
 }
 

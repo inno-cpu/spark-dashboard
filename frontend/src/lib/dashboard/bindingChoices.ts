@@ -52,12 +52,17 @@ export interface BindingControl {
 /** A GPU as the control names it. */
 type GpuChoiceSource = GpuIdentity & Pick<GpuMetrics, 'name'>
 
+/** A router backend as the control names it: the name the router reports. */
+export interface BackendChoiceSource {
+  name: string
+}
+
 /**
  * A binding that names a concrete target. Following and unreadable are the
  * other two states, and neither has a target to look up, label or keep — so
  * everything below takes this rather than re-asking which kind it has.
  */
-type PinnedBinding = Extract<PanelBinding, { kind: 'gpu' } | { kind: 'engine' }>
+type PinnedBinding = Extract<PanelBinding, { kind: 'gpu' } | { kind: 'engine' } | { kind: 'backend' }>
 
 /**
  * The targets a panel of this binding kind can be pointed at, with the one it
@@ -72,6 +77,7 @@ export function bindingChoices(
   binding: PanelBinding,
   gpus: readonly GpuChoiceSource[],
   engines: readonly EngineIdentity[],
+  backends: readonly BackendChoiceSource[] = [],
 ): BindingControl {
   if (kind === 'none') return { value: FOLLOW_CHOICE, choices: [] }
 
@@ -83,11 +89,15 @@ export function bindingChoices(
     // and the operator's next move is to replace it.
     ...(readable ? [] : [unreadableChoice()]),
     { value: FOLLOW_CHOICE, label: followLabel(kind) },
-    ...(kind === 'gpu' ? gpus.map(gpuChoice) : engines.map(engineChoice)),
+    ...(kind === 'gpu'
+      ? gpus.map(gpuChoice)
+      : kind === 'backend'
+        ? backends.map(backendChoice)
+        : engines.map(engineChoice)),
   ]
 
   const value = pinned ? choiceOf(pinned) : readable ? FOLLOW_CHOICE : UNREADABLE_CHOICE
-  const missing = pinned && !onThisHost(pinned, gpus, engines) ? absentChoice(pinned) : null
+  const missing = pinned && !onThisHost(pinned, gpus, engines, backends) ? absentChoice(pinned) : null
 
   return { value, choices: missing ? [...choices, missing] : choices }
 }
@@ -112,7 +122,8 @@ export function bindingFromChoice(value: string): PanelBinding {
     return Number.isInteger(index) && index >= 0 ? { kind: 'gpu', index } : UNREADABLE
   }
 
-  return kind === 'engine' ? { kind: 'engine', endpoint: target } : UNREADABLE
+  if (kind === 'engine') return { kind: 'engine', endpoint: target }
+  return kind === 'backend' ? { kind: 'backend', name: target } : UNREADABLE
 }
 
 /**
@@ -120,15 +131,21 @@ export function bindingFromChoice(value: string): PanelBinding {
  * otherwise — following, unreadable, or naming the wrong kind of target for
  * this panel, which is a corrupt document and reads the same way.
  */
-function pinnedTarget(kind: 'gpu' | 'engine', binding: PanelBinding): PinnedBinding | null {
+function pinnedTarget(kind: 'gpu' | 'engine' | 'backend', binding: PanelBinding): PinnedBinding | null {
   if (kind === 'gpu' && binding.kind === 'gpu') return binding
   if (kind === 'engine' && binding.kind === 'engine') return binding
+  if (kind === 'backend' && binding.kind === 'backend') return binding
   return null
 }
 
 function gpuChoice(gpu: GpuChoiceSource): BindingChoice {
   const pin = { kind: 'gpu', index: gpuIndexOf(gpu) } as const
   return { value: choiceOf(pin), label: `${pinLabel(pin)} — ${gpu.name}` }
+}
+
+function backendChoice(backend: BackendChoiceSource): BindingChoice {
+  const pin = { kind: 'backend', name: backend.name } as const
+  return { value: choiceOf(pin), label: backend.name }
 }
 
 function engineChoice(engine: EngineIdentity): BindingChoice {
@@ -149,23 +166,30 @@ function onThisHost(
   pin: PinnedBinding,
   gpus: readonly GpuChoiceSource[],
   engines: readonly EngineIdentity[],
+  backends: readonly BackendChoiceSource[] = [],
 ): boolean {
-  return pin.kind === 'gpu'
-    ? findGpuByIndex(gpus, pin.index) !== undefined
-    : findEngineByEndpoint(engines, pin.endpoint) !== undefined
+  if (pin.kind === 'gpu') return findGpuByIndex(gpus, pin.index) !== undefined
+  if (pin.kind === 'engine') return findEngineByEndpoint(engines, pin.endpoint) !== undefined
+  return backends.some((backend) => backend.name === pin.name)
 }
 
 /** The one place a target becomes an option value, and the only grammar
  *  `bindingFromChoice` has to read back. */
 function choiceOf(pin: PinnedBinding): string {
-  return pin.kind === 'gpu' ? `gpu:${pin.index}` : `engine:${pin.endpoint}`
+  if (pin.kind === 'gpu') return `gpu:${pin.index}`
+  if (pin.kind === 'engine') return `engine:${pin.endpoint}`
+  return `backend:${pin.name}`
 }
 
 /** How a target is named to the operator, on its own. */
 function pinLabel(pin: PinnedBinding): string {
-  return pin.kind === 'gpu' ? `GPU ${pin.index}` : pin.endpoint
+  if (pin.kind === 'gpu') return `GPU ${pin.index}`
+  if (pin.kind === 'engine') return pin.endpoint
+  return `backend ${pin.name}`
 }
 
-function followLabel(kind: 'gpu' | 'engine'): string {
-  return kind === 'gpu' ? 'Follow the page’s GPU' : 'Follow the page’s engine'
+function followLabel(kind: 'gpu' | 'engine' | 'backend'): string {
+  if (kind === 'gpu') return 'Follow the page’s GPU'
+  if (kind === 'engine') return 'Follow the page’s engine'
+  return 'Choose a backend'
 }

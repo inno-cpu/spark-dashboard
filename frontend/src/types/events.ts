@@ -2,12 +2,16 @@
  * How much history a chart covers. Per-panel configuration since the rework —
  * two panels on one page legitimately want a spike and a trend.
  */
-export type TimeWindow = '5m' | '10m' | '15m'
+export type TimeWindow = '5m' | '10m' | '15m' | '1h' | '6h' | '24h' | '7d'
 
 export const TIME_WINDOW_SECONDS: Record<TimeWindow, number> = {
   '5m': 300,
   '10m': 600,
   '15m': 900,
+  '1h': 3_600,
+  '6h': 21_600,
+  '24h': 86_400,
+  '7d': 604_800,
 }
 
 /**
@@ -16,4 +20,4 @@ export const TIME_WINDOW_SECONDS: Record<TimeWindow, number> = {
  * is part of what this is and object key order is not something to lean on; a
  * spec holds the two in step.
  */
-export const TIME_WINDOWS: readonly TimeWindow[] = ['5m', '10m', '15m']
+export const TIME_WINDOWS: readonly TimeWindow[] = ['5m', '10m', '15m', '1h', '6h', '24h', '7d']

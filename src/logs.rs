@@ -370,6 +370,7 @@ mod tests {
                 None => DeploymentMode::Native,
             },
             gpu_indexes: Vec::new(),
+            gpu_index_hint: None,
             pids: Vec::new(),
             container_id: container_id.map(str::to_string),
         }

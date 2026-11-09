@@ -42,6 +42,8 @@ interface EditModeBarProps {
    * withholds itself while one is open rather than being withheld here.
    */
   rotation?: ReactNode
+  /** GPU / all-models control, shown beside the page config. */
+  targetSelector?: ReactNode
   onBegin: () => void
   onAdd: (type: PanelType) => void
   onSave: () => void
@@ -67,6 +69,7 @@ export function EditModeBar({
   refused,
   pageConfig,
   rotation,
+  targetSelector,
   onBegin,
   onAdd,
   onSave,
@@ -77,6 +80,7 @@ export function EditModeBar({
       <Status editing={editing} narrow={narrow} readOnly={readOnly} refused={refused} />
 
       <div className="flex items-center gap-2">
+        {targetSelector}
         {rotation}
         {editing ? (
           <>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useDismissablePopover } from '@/hooks/useDismissablePopover'
 import type { DashboardPage } from '@/lib/dashboard/schema'
 import { STARTING_LAYOUTS, type StartingLayout } from '@/lib/dashboard/startingLayouts'
+import { usePluginTemplates } from '@/lib/dashboard/plugins'
 
 interface PagesMenuProps {
   /** The page being viewed — the one this menu renames and deletes. */
@@ -62,6 +63,10 @@ export function PagesMenu({
   onResetEverything,
 }: PagesMenuProps) {
   const { open, setOpen, toggle, containerRef } = useDismissablePopover<HTMLDivElement>()
+  // Templates contributed by installed plugins, discovered at runtime. A
+  // plugin that is absent, disabled or has an unreachable host yields an empty
+  // list: the menu is exactly Spark's own, never a broken one.
+  const pluginTemplates = usePluginTemplates()
 
   /** Every action here changes the page the menu is describing, so it gets the
    *  menu out of the way of whatever it did. */
@@ -122,6 +127,15 @@ export function PagesMenu({
               {STARTING_LAYOUTS.map((layout) => (
                 <MenuButton key={layout.name} disabled={disabled} onClick={() => onCreate(layout)}>
                   {layout.name} layout
+                </MenuButton>
+              ))}
+              {pluginTemplates.map((layout) => (
+                <MenuButton
+                  key={`plugin-${layout.name}`}
+                  disabled={disabled}
+                  onClick={() => onCreate(layout)}
+                >
+                  {layout.name} plugin
                 </MenuButton>
               ))}
             </div>

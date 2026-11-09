@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLatestSnapshot } from '@/hooks/useMetricsStore'
 import {
   bindingChoices,
@@ -56,11 +56,13 @@ export function PanelSettings({
   // The held snapshot, frozen with the rest of the page: the targets on offer
   // hold still while the operator is choosing between them.
   const snapshot = useLatestSnapshot()
+  const backends = useRouterBackends()
   const source = bindingChoices(
     panelBindingKind(panel.type),
     panel.binding,
     snapshot ? snapshotGpus(snapshot) : [],
     snapshot?.engines ?? [],
+    backends,
   )
 
   return (
@@ -157,4 +159,33 @@ function Select({
       ))}
     </select>
   )
+}
+
+/** The router's backends, for the Source control of a backend-bound panel. */
+function useRouterBackends(): { name: string }[] {
+  const [backends, setBackends] = useState<{ name: string }[]>([])
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const response = await fetch('/api/router/status', { headers: { accept: 'application/json' } })
+        if (!response.ok) return
+        const body = (await response.json()) as { backends?: { name?: string }[] }
+        const names = (body.backends ?? [])
+          .map((backend) => backend.name)
+          .filter((name): name is string => typeof name === 'string' && name.length > 0)
+          .map((name) => ({ name }))
+        if (!cancelled) setBackends(names)
+      } catch {
+        /* the Source control simply offers no backends until the router answers */
+      }
+    }
+    void load()
+    const timer = setInterval(() => void load(), 15000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+  return backends
 }

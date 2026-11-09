@@ -1,5 +1,6 @@
 mod common;
 pub mod detector;
+pub mod discovery;
 pub mod histogram;
 mod model_info;
 pub mod ollama;
@@ -473,6 +474,11 @@ pub struct EngineSnapshot {
     /// by the metrics collector at snapshot-assembly time (it owns the NVML
     /// device handles), so the copy in the shared engine state is always empty.
     pub gpu_indexes: Vec<u32>,
+    /// The provider's GPU index for an engine with no PID to match. Internal:
+    /// the metrics loop turns it into `gpu_indexes` when NVML cannot, and the
+    /// wire format keeps its single source of truth.
+    #[serde(skip)]
+    pub gpu_index_hint: Option<u32>,
     /// Host-namespace PIDs belonging to the engine, used to compute
     /// `gpu_indexes`. Internal plumbing between the collector loops — not
     /// part of the wire format.
@@ -575,6 +581,10 @@ pub struct EngineState {
     /// Docker container id captured at detection time (Linux Docker scan only).
     /// Forwarded into each `EngineSnapshot` for the log viewer to consume.
     pub container_id: Option<String>,
+    /// Host NVML index reported by the discovery provider, for an engine that
+    /// owns no process of its own and so cannot be attributed through NVML's
+    /// compute-process lists. Used only when that attribution finds nothing.
+    pub gpu_index_hint: Option<u32>,
 }
 
 impl EngineState {
@@ -592,6 +602,7 @@ impl EngineState {
             model_attempted_at: None,
             pids: Vec::new(),
             container_id: None,
+            gpu_index_hint: None,
         }
     }
 
@@ -710,6 +721,7 @@ impl EngineState {
             recent_requests: Vec::new(),
             deployment_mode: self.deployment_mode.clone(),
             gpu_indexes: Vec::new(),
+            gpu_index_hint: self.gpu_index_hint,
             pids: self.pids.clone(),
             container_id: self.container_id.clone(),
         }
@@ -900,6 +912,70 @@ fn adopt_container(state: &mut EngineState, container_id: Option<&str>) -> bool 
     true
 }
 
+/// Reconciles the discovery provider's answer into the engine map.
+///
+/// Discovery is an *additional source* for the same map the process scan feeds:
+/// an endpoint that is already there is refreshed, not duplicated, and one that
+/// vanishes from an authoritative answer is simply no longer refreshed — the
+/// existing poll/grace path then stops and removes it, which is what keeps a
+/// discovered engine's lifecycle identical to a detected one's.
+async fn apply_discovery(
+    client: &reqwest::Client,
+    url: &str,
+    engine_map: &mut HashMap<(EngineType, String), EngineState>,
+    known: &mut std::collections::HashSet<String>,
+) {
+    let document = match discovery::fetch(client, url).await {
+        Ok(document) => document,
+        Err(error) => {
+            // The provider being unreachable says nothing about the engines it
+            // listed last time. Keep them; their own probes decide.
+            tracing::debug!("engine discovery unavailable: {error}");
+            return;
+        }
+    };
+
+    for entry in &document.engines {
+        let Some(engine_type) = discovery::parse_engine_type(&entry.engine_type) else {
+            tracing::debug!("discovery: skipping unknown engine type {:?}", entry.engine_type);
+            continue;
+        };
+        let key = (engine_type.clone(), entry.endpoint.clone());
+        let state = engine_map.entry(key).or_insert_with(|| {
+            let adapter = create_adapter(
+                engine_type.clone(),
+                entry.endpoint.clone(),
+                client.clone(),
+                entry.served_model.clone(),
+                None,
+            );
+            tracing::info!(
+                "Discovered engine: {} at {} (model={:?})",
+                engine_type,
+                entry.endpoint,
+                entry.served_model,
+            );
+            EngineState::new(adapter, DeploymentMode::Native)
+        });
+        // A virtual endpoint owns no process, so the PID scan can never fill
+        // this in; the provider's answer is the only GPU association available.
+        if entry.gpu_index.is_some() {
+            state.gpu_index_hint = entry.gpu_index;
+        }
+        known.insert(entry.endpoint.clone());
+    }
+
+    for endpoint in discovery::retired(known, &document) {
+        // Deliberately *not* removed here. The engine stops being refreshed, so
+        // its own probes start failing, which walks it through the collector's
+        // existing 3-failure -> Stopped and 30-second -> removed path. Deleting
+        // it on the spot would skip the grace period an operator relies on
+        // during a reload, when the endpoint is briefly absent.
+        tracing::info!("Discovered engine no longer advertised, letting it expire: {endpoint}");
+        known.remove(&endpoint);
+    }
+}
+
 /// Runs the engine detection and metrics collection loop.
 ///
 /// This function is spawned as a background tokio task. It:
@@ -944,13 +1020,46 @@ pub async fn engine_collector_loop(
     let mut detection_interval = tokio::time::interval(Duration::from_secs(5));
     let mut poll_interval = tokio::time::interval(Duration::from_secs(1));
 
+    // External discovery is off unless a provider URL is configured, so a
+    // host without one behaves exactly as before.
+    let discovery_url = std::env::var("SPARK_DASHBOARD_DISCOVERY_URL")
+        .ok()
+        .filter(|url| !url.trim().is_empty());
+    let mut discovered: std::collections::HashSet<String> = std::collections::HashSet::new();
+    if let Some(url) = &discovery_url {
+        tracing::info!("External engine discovery: {url}");
+    }
+
     loop {
         tokio::select! {
             _ = detection_interval.tick() => {
                 // Refresh process list for scanning
                 detector::refresh_process_table(&mut sys);
 
-                let detected = detector::detect_engines(&sys, &client, &api_keys).await;
+                let mut detected = detector::detect_engines(&sys, &client, &api_keys).await;
+
+                // Endpoints explicitly owned by an external discovery provider
+                // must not be auto-detected as a second engine. This is how a
+                // bridge-backed external runtime avoids a duplicate card beside
+                // the bridge's richer record.
+                let excluded_engine_urls: std::collections::HashSet<String> =
+                    std::env::var("SPARK_DASHBOARD_EXCLUDE_ENGINE_URLS")
+                        .unwrap_or_default()
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(ToOwned::to_owned)
+                        .collect();
+                if !excluded_engine_urls.is_empty() {
+                    let before = detected.len();
+                    detected.retain(|d| !excluded_engine_urls.contains(&d.endpoint));
+                    if detected.len() != before {
+                        tracing::info!(
+                            "Excluded {} auto-detected engine endpoint(s) owned by discovery",
+                            before - detected.len()
+                        );
+                    }
+                }
 
                 // Add newly detected engines
                 for d in &detected {
@@ -997,6 +1106,10 @@ pub async fn engine_collector_loop(
                     .map(|d| (d.engine_type.clone(), d.endpoint.clone()))
                     .collect();
                 clear_stale_pids(&mut engine_map, &detected_keys);
+
+                if let Some(url) = &discovery_url {
+                    apply_discovery(&client, url, &mut engine_map, &mut discovered).await;
+                }
             }
 
             _ = poll_interval.tick() => {

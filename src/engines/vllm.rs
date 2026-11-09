@@ -141,6 +141,9 @@ impl EngineAdapter for VllmAdapter {
         let kv_cache_percent = parsed
             .gauge_mean("vllm_kv_cache_usage_perc")
             .or_else(|| parsed.gauge_mean("vllm_gpu_cache_usage_perc"))
+            // Older bridge builds typed this family as a counter; read that value
+            // until the process is restarted with the corrected declaration.
+            .or_else(|| parsed.counters.get("vllm_kv_cache_usage_perc").copied())
             .map(|v| v * 100.0);
 
         let counter = |name: &str| parsed.counters.get(name).copied();

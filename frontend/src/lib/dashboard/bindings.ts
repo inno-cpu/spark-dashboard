@@ -37,6 +37,12 @@ export type PanelBinding =
   /** One inference engine, pinned by its endpoint. */
   | { readonly kind: 'engine'; readonly endpoint: string }
   /**
+   * One router backend, pinned by the name the router reports (`gpu0`…`gpu3`).
+   * Router backends are not GPUs and not engines: the router owns that inventory,
+   * and a panel that shows one has to resolve against the router, not NVML.
+   */
+  | { readonly kind: 'backend'; readonly name: string }
+  /**
    * Something was pinned here and it could not be read — a hand-edited file, a
    * truncated write. Kept as a state of its own rather than folded into
    * `follow`, so the panel says it needs repointing instead of showing the page
@@ -94,6 +100,10 @@ export function readBinding(raw: unknown): PanelBinding {
     case 'engine':
       return typeof raw.endpoint === 'string' && raw.endpoint.length > 0
         ? { kind: 'engine', endpoint: raw.endpoint }
+        : UNREADABLE
+    case 'backend':
+      return typeof raw.name === 'string' && raw.name.length > 0
+        ? { kind: 'backend', name: raw.name }
         : UNREADABLE
     default:
       return UNREADABLE
