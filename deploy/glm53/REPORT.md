@@ -1,141 +1,217 @@
-# GLM-5.3-Flash PP4 — integration and safety-stop report
+# GLM-5.3-Flash power discrepancy — resolution and safe enablement
 
-Date: 2026-11-10 UTC
+Date: 2026-11-10 UTC  
 Host: `ffard@192.168.1.145`
-Live control surface: Spark dashboard Model Lab at `http://127.0.0.1:3100`
-(not the inactive Hqcc checkout)
 
 ## Outcome
 
-GLM-5.3-Flash was successfully loaded on all four GPUs through the managed
-profile path and registered as one native Xinference Morrowmake model
-(`glm53-pp4`, exposed as `glm-5.3-flash`). It answered chat and router requests.
+The 260–267 W readings were **instantaneous NVML power samples**, not sustained
+power. The 180 W policy is an **averaged/firmware power ceiling**; it is active
+and enforced, but it does not clip individual instantaneous samples. The earlier
+~185 W observation was a sparse manual sample taken during a **cached decode**
+run, not a continuous trace of cold prefill.
 
-It is **not enabled for production**. During long-context prefill the cards
-sustained **260–267 W per GPU against the configured 180 W limit**, including
-with `MAX_BATCHED=512` and `MAX_SEQS=1`. The workload was stopped and the
-previous Qwen set was restored. The GLM profile is retained in Model Lab as a
-**disabled/blocked** entry so it cannot be started accidentally.
+Under a 20 Hz NVML trace and a conservative hard guard (stop if any rolling
+**5 s mean** exceeded **185 W**), GLM completed cold 32K, 128K, and 262K
+prefill plus 512-token generation:
 
-This is a hard safety stop, not a throughput judgement. No power-limit,
-firmware, PCIe, SMFc, vLLM-runtime or checkpoint changes were made.
+- highest instantaneous sample: **287.35 W**
+- highest rolling 5 s mean: **146.22 W**
+- guard trips: **0**
+- NVML enforced limit: **180 W** on all four GPUs
+- SW Power Capping counters advanced during the run
+- no thermal throttle, Xid, power fault, or Prometheus power alert
 
-## Final live state (Mode A, safe)
+The GLM profile is therefore **enabled** in Model Lab. It is not currently
+loaded; Qwen is the active workload. Qwen → GLM → Qwen was exercised through
+the existing Spark endpoint.
 
-- Qwen `qwen38-gpu1`: READY on GPU1, 163,840 context.
-- Qwen `qwen38-flashnext`: READY on GPU2, 262,144 context.
-- Router: `gpu1` and `gpu2` healthy; `gpu0`/`gpu3` free.
-- Spark Model Lab: Qwen profiles loadable; `glm53-pp4` shown as **blocked**.
-- GLM container stopped and removed from the running set.
-- GLM profile load returns HTTP 409 with the power-safety reason.
-- 180 W limits unchanged.
+## 1. Original vs managed experiment
 
-## What was integrated
+### Same
 
-1. **Native Xinference adapter** — the installed `Morrowmake` engine was
-   extended to recognize the GLM family/name and expose the existing adapter
-   surface. Chat, streaming, reasoning content, tools and OpenAI-compatible
-   usage were exercised. The GLM model is one UID on CPU (`accelerators: []`)
-   with the four GPUs represented by the external record.
-   **Identity limitation:** Xinference did not accept the standalone
-   `glm-5.3-flash` custom family, so the launch uses the existing
-   `qwen38-flashnext` Morrowmake family with `served_model_name`/UID set to
-   `glm-5.3-flash`/`glm53-pp4`. The adapter and telemetry expose GLM correctly,
-   but this is not an exact new `model_family` registration and must be closed
-   before unblocking the profile.
-2. **Managed four-GPU profile** — `/etc/xinference/profiles/glm53-pp4.json`,
-   with `gpus: [0,1,2,3]`, runtime metadata and a disabled flag.
-3. **Runtime adapter** — `/usr/local/libexec/glm53-runtime` stops the two Qwen
-   models, starts the pinned GLM container, waits for health, registers the
-   Morrowmake adapter, and restores the saved Qwen set on stop/failure. It is
-   called from the existing Spark profile load/unload endpoint; no second GPU
-   manager was created.
-4. **Telemetry** — the Spark bridge external record is one logical model with
-   `gpu_indices: [0,1,2,3]` and all four verified GPU UUIDs. The bridge row was
-   checked and there is no adapter + external double-count.
-5. **Router** — one model-specific path through the existing GPU0 backend;
-   an earlier duplicate GLM backend was removed. Router model listing and chat
-   were verified.
-6. **Control Center** — Spark's Model Lab shows the managed profile, GPU list,
-   and blocked state. Hqcc was not running and was not deployed as a parallel
-   control plane.
+- Image: `glm53-pinned:local`,
+  `sha256:18a2f26207568128e1d792ce923e86a74e40def1e43e492db83132cab8cdbe14`;
+  engine revision `819146023facb31c04f1f8512e52464835a10d40`.
+- Target and DFlash2 checkpoints: same paths and verified hashes
+  (`checkpoint-verification.json`).
+- Layer partition: `9,12,12,12`; TP1/PP4; `CUDA_VISIBLE_DEVICES=0,1,2,3`.
+- `max_model_len=262144`, `gpu_memory_utilization=0.95`, block size 4608.
+- `max_num_batched_tokens=2312`, `max_num_seqs=4`.
+- DFlash2: method `dflash`, 7 speculative tokens, adaptive K.
+- P2P off; same four physical UUIDs.
+- 180 W policy applied at boot by `cmp-gpu-power-policy.service`; no runtime
+  power-limit change.
+- Qwen engines were stopped for both GLM runs.
 
-## Memory / partition results
+### Different
 
-| Partition | Stage-0 load | Resident MiB (0/1/2/3) | KV tokens | Result |
-|---|---|---|---|---|
-| 9,12,12,12 | non-fatal 20 MiB allocation warnings on GPU0 | 36,968 / 57,812 / 59,212 / 62,778 | 1,217,513 | retained baseline; warnings real |
-| 8,13,12,12 | no stage-0 warnings | 29,674 / 60,432 / 57,954 / 61,520 | 1,088,467 | rejected: GPU1 276 W |
+| Item | Original | Managed |
+|---|---|---|
+| Launch | recipe `start.sh`; boot check delegated after health | `glm53-runtime`; `BOOT_CHECK=0` |
+| Model start | cold process; prior benchmark runs had already populated prefix cache | cold process for each managed run |
+| 128K “warm” step | **0.908 s TTFT** (cached) | **20.03 s** (cold) |
+| 256K “warm” step | **1.495 s TTFT** (cached) | **28.99 s** (cold) |
+| Power instrumentation | no continuous trace; one manual `nvidia-smi` observation (~185 W) | 2 s sampling initially; 20 Hz NVML for the final trace |
+| Benchmark GPU snapshot | taken **after** each measured run | same, but continuous trace covered the prefill |
 
-The 8-layer stage 0 removed the startup allocation failures, but it moved a
-13th layer onto a 64 GiB card and raised GPU1 power to 276 W. It was stopped.
-The 9-layer partition is the only 45-layer layout with no 13-layer stage; its
-stage-0 warnings remain a known load-time risk.
+The original `glm-bench-final.json` was produced after `glm-bench.json` and
+`glm-bench-512.json` with the same deterministic prompts. Prefix caching made
+the final warm steps ~0.9 s at 128K and ~1.5 s at 256K. The managed process had
+no such cache, so its warm step performed the real cold prefill and its power
+trace covered that interval.
 
-## Managed benchmarks (512 generated tokens, warm prefix)
+## 2. Power-limit evidence
 
-| Context | TTFT s | Decode tok/s | Notes |
-|---|---:|---:|---|
-| 32K | 0.724 | 116.5 | MAX_BATCHED 2312 |
-| 128K | 0.924 | 85.6 | MAX_BATCHED 2312; power violation |
-| 256K | 1.439 | 105.8 | MAX_BATCHED 2312; power violation |
-| 128K | 1.047 | 92.9 | MAX_BATCHED 512, MAX_SEQS 1; still 260 W |
+Read-only NVML/`nvidia-smi` evidence, all four GPUs:
 
-Qwen Flash-Next reference on the same host: 181.4 / 133.8 / 155.4 tok/s at
-32K / 128K / 256K.
+- `power.limit`: **180.00 W**
+- `enforced.power.limit`: **180.00 W**
+- `power.default_limit`: **250.00 W**
+- supported range: **100–250 W**
+- power-management mode: **enabled (1)**
+- performance state: P0
+- supported throttle-reason mask: `0x7ff`
+- `nvidia-smi -q -d POWER`: “Average Power Draw: N/A”; **Instantaneous Power
+  Draw** is the reported field; `Power Samples` gives max/min/avg over a short
+  2.37 s window
+- no software invocation of `nvidia-smi -pl` during the managed run; the boot
+  policy log shows 180 W accepted on all four cards
+- `cmp-gpu-power-policy.service` is active/exited with rc=0; the policy script
+  iterates every visible GPU and never raises a limit
+- `nvidia-persistenced` active; no power-limit reset observed
+- temperatures stayed in the low 40s °C; no thermal or HW power-brake throttle
 
-## Power evidence
+### SW Power Capping counter delta during validation
 
-Sampled with `nvidia-smi --query-gpu=index,power.draw` during generation:
+From `/var/log`/fresh `nvidia-smi -q -d PERFORMANCE` snapshots:
 
-- 32K: max observed 183.2 W (brief).
-- 128K/256K, batch 2312: **234–267 W** on individual GPUs for many consecutive
-  seconds.
-- 128K, batch 512, one sequence: **260.8 W**, plus repeated >200 W samples.
+| GPU | before (µs) | after (µs) | delta |
+|---|---:|---:|---:|
+| 0 (02:00) | 5,348,687 | 5,577,119 | +228,432 |
+| 1 (03:00) | 708,444,526 | 712,358,535 | +3,914,009 |
+| 2 (82:00) | 3,182,614 | 3,285,302 | +102,688 |
+| 3 (83:00) | 156,217,293 | 156,359,736 | +142,443 |
 
-The 180 W setting was not changed. This is the operative blocker.
+The GPU’s SW power-capping mechanism is therefore operating, while
+instantaneous `power.draw` can overshoot between control updates. This is the
+expected NVIDIA averaged-power behavior, not an unenforced limit.
 
-## Rollback
+### Continuous trace
 
-Backups: `/home/ffard/glm53-integration-backup-20261109T224207Z`
-(root-owned, contains `/etc/xinference`, `/etc/hyperqwen-control`, Spark/Hqcc
-source, adapter, bridge, router and service drop-ins).
+Trace: `/home/ffard/glm53-test/power-trace-final.jsonl`
+(20 Hz NVML; 5 s rolling mean; hard guard at 185 W).
 
-- Source commit: `fecd4f615661453e1e66267183c747b9629d6722` on branch
-  `hqcc-flashnext-integration` in `/home/ffard/spark-dashboard`.
-- No GitHub push: no HTTPS/SSH credential is available. The commit is local.
-- Spark Docker-group grant used during the managed test was **reverted**;
-  `SupplementaryGroups=video render hqcc` is back in place.
-- Source: `git -C /home/ffard/spark-dashboard log -1` (see commit hash in the
-  handoff).
-- Binary backup: `/home/ffard/glm53-test/spark-dashboard.pre-integration`.
-- Adapter/bridge backups: `core.py.pre-integration`,
-  `spark_bridge.py.pre-integration` in `/home/ffard/glm53-test`.
-- Config backups: `flashnext-external.json.pre-integration`,
-  `backends.json.pre-integration`, `qwen38-flashnext-256k.json.pre-integration`.
-- To remove the feature: restore those files, restore the Spark binary, reload
-  systemd, restart `xinference`, `hyperqwen-router` and `spark-dashboard`;
-  reload Qwen profiles. No GLM image/checkpoint deletion is required.
+| Workload | Instantaneous max | Worst 5 s mean |
+|---|---:|---:|
+| 32K cold | 278.86 W | 136.05 W |
+| 128K cold | 287.35 W | 146.22 W |
+| 262K cold | 287.35 W | 146.22 W |
+| whole validation | 287.35 W | 146.22 W |
 
-## Definition-of-done status
+No guard trip. The intended 262,144-token context was exercised as a
+261,572-token prompt + 512 generated tokens (262,084 total). Measured decode
+was 94.37 tok/s with TTFT 1.52 s after the cold prefix; cold prefill TTFT was
+28.99 s.
 
-- [x] Existing Qwen mode preserved and restored (Qwen1 + Flash-Next READY).
-- [x] One logical four-GPU GLM record in bridge/Spark, verified UUID list.
-- [x] Native Morrowmake adapter path and router path exercised.
-- [x] Safe rollback from GLM switch; no GLM left running.
-- [ ] GLM reliably selectable at 262K: **blocked by sustained >180 W prefill**.
-- [ ] Exact `glm-5.3-flash` Xinference model-family registration: adapter uses
-  the existing Morrowmake family alias (see identity limitation).
+### Prometheus cross-check
 
-The correct production state is the current Mode A: GLM disabled, Qwen
-available. Enabling it would knowingly violate the host's 180 W safety limit.
+The existing Netdata/Prometheus averaged series
+`netdata_nvidia_smi_gpu_power_draw_Watts_average` reports:
 
-## Files
+- original window 13:20–13:27: max 194 W (3 samples >180), mean 49–61 W
+- managed window 23:52–23:56: max 177.33 W, no sample >180
+- `ALERTS`: empty; the `GpuPowerAbovePolicy` rule requires >185 W for 2 minutes
 
-- `/etc/xinference/profiles/glm53-pp4.json` (disabled)
-- `/usr/local/libexec/glm53-runtime`
-- `/etc/xinference/flashnext-external.json` (GLM record retained, unavailable)
-- `/etc/hyperqwen-control/backends.json` (one GLM path removed; Qwen slots intact)
-- Spark source: `src/server.rs`, `frontend/src/components/grid/panels/ModelLabPanels.tsx`
-- Evidence: `glm-bench-managed-32k.json`, `glm-bench-managed-long.json`,
-  `glm-bench-lowbatch-128k.json`
+This is consistent with the 5 s trace and inconsistent with a sustained
+260–267 W claim.
+
+## 3. Root cause
+
+1. **Workload state differed.** The standalone final benchmark was fully
+   prefix-cached from two earlier identical runs; the managed benchmark was
+   cold. The power-consuming cold prefill was absent from the standalone
+   benchmark’s measured window.
+2. **Measurement domain differed.** `power.draw` is instantaneous. A single
+   ~185 W sample cannot establish a maximum over prefill, and 260–267 W
+   instantaneous samples do not establish sustained average power. The 180 W
+   ceiling is enforced by averaged SW power capping, which the counters confirm.
+3. **The original evidence was incomplete.** No continuous trace covered the
+   original prefill; the report’s “~185 W maximum observed” describes one
+   observation, not a sampled maximum over all phases.
+
+Remaining uncertainty: without an external electrical meter, software can only
+demonstrate NVML-reported power and the GPU’s own capping counters. Within that
+instrumentation, the averaged 180 W policy is demonstrably active. A hard
+instantaneous 180 W ceiling is not provided by this NVIDIA power-management
+mode and cannot be created by software.
+
+## 4. Native GLM family registration
+
+The prior alias workaround is removed.
+
+- Registered via the installed Xinference API:
+  `POST /v1/model_registrations/LLM`, `persist=true`.
+- Model name: **`glm-5.3-flash`**
+- `model_family`: **`glm-5.3`** (required value from Xinference’s tool-call
+  family allowlist)
+- `model_engine`: **Morrowmake**
+- context: **262144**
+- abilities: chat, generate, tools, reasoning
+- engine allowlist: Morrowmake
+- Existing `qwen38-flashnext` family untouched.
+
+Verified through `/v1/models`:
+`model_name=glm-5.3-flash`, `model_family=glm-5.3`,
+`model_ability=[chat,generate,tools,reasoning]`, context 262144,
+engine Morrowmake. Chat, reasoning content, tool calls, and streaming all
+returned valid responses; the router served the logical model
+`glm-5.3-flash`.
+
+## 5. Corrective/lifecycle changes
+
+- `glm53-runtime`: flash restore health timeout raised from 300 s to 600 s;
+  stop now waits for both restored models and returns nonzero if restoration
+  fails; diagnostic subcommand allows an explicit one-off test while the
+  profile is disabled (not used by Spark).
+- Profile launch uses the native family; `disabled=false`; batch 2312/seq 4.
+- Spark service re-granted Docker supplementary group so the existing managed
+  helper can start/stop the container. This is required for the existing
+  profile path; it is a privileged grant and should be reviewed if the profile
+  is retired.
+- Existing Spark 409 guard retained in source; it now passes because the
+  profile is explicitly enabled and validated.
+
+## 6. Final state
+
+- GLM profile: **enabled**, inactive.
+- Qwen `qwen38-gpu1`: READY, 163,840 context.
+- Qwen `qwen38-flashnext`: READY, 262,144 context.
+- Router: GPU1 and GPU2 healthy; GPU0/GPU3 free.
+- Spark, Xinference, router, smfc, smfc-c80-monitor, cmp-gpu-guard,
+  gpu-safety-backend, cmp-gpu-power-policy: active.
+- 180 W limits unchanged and confirmed on all four GPUs.
+- Native GLM family registered; Flash-Next integration preserved.
+- Qwen → GLM → Qwen switch exercised; final state is Qwen.
+
+## 7. Source and rollback
+
+- Local commit: see `git -C /home/ffard/spark-dashboard log -1`.
+- Branch: `hqcc-flashnext-integration`.
+- No GitHub push (no credentials).
+- Backup: `/home/ffard/glm53-integration-backup-20261109T224207Z`
+- Power trace: `/home/ffard/glm53-test/power-trace-final.jsonl`
+- Profile: `/etc/xinference/profiles/glm53-pp4.json`
+- Helper: `/usr/local/libexec/glm53-runtime`
+- Family registration: `POST /v1/model_registrations/LLM` (script in
+  `deploy/glm53/register_glm_family.py`)
+
+Rollback: disable the profile (set `disabled=true`), stop the GLM container via
+the helper, and restore Qwen profiles. Do not delete the image/checkpoints.
+
+## 8. Next actionable engineering option
+
+If a **hard instantaneous** 180 W ceiling is required, no supported NVIDIA
+software mechanism provides it on CMP 170HX. The options are hardware/firmware
+or an external power controller, both outside the authorized scope. For the
+configured averaged policy, this validation supports enabling GLM at 262K.

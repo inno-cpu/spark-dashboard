@@ -152,7 +152,7 @@ def restore_qwen() -> bool:
     if state.get("flashnext"):
         if not container_running(FLASH_CONTAINER):
             docker("start", FLASH_CONTAINER, check=True)
-        if not wait_http("http://127.0.0.1:8000/health", 300):
+        if not wait_http("http://127.0.0.1:8000/health", 600):
             log("restore flashnext: container health timeout")
             ok = False
         elif "qwen38-flashnext" not in models():
@@ -174,9 +174,9 @@ def stop_glm() -> bool:
     return True
 
 
-def start_glm() -> int:
+def start_glm(allow_disabled: bool = False) -> int:
     profile_doc = json.loads(GLM_PROFILE.read_text())
-    if profile_doc.get("disabled"):
+    if profile_doc.get("disabled") and not allow_disabled:
         log("GLM profile is disabled: " + str((profile_doc.get("validation") or {}).get("error")))
         return 2
     if GLM_UID in models() and container_running(CONTAINER):
@@ -282,14 +282,14 @@ def start_glm() -> int:
 
 def main() -> int:
     command = sys.argv[1] if len(sys.argv) > 1 else "status"
-    if command == "start":
-        return start_glm()
+    if command in ("start", "start-diagnostic"):
+        return start_glm(allow_disabled=command == "start-diagnostic")
     if command == "stop":
         if "glm53-pp4" in models() or container_running(CONTAINER):
             stop_glm()
-        restore_qwen()
-        print(json.dumps({"uid": GLM_UID, "status": "STOPPED", "restored": True}))
-        return 0
+        restored = restore_qwen()
+        print(json.dumps({"uid": GLM_UID, "status": "STOPPED", "restored": restored}))
+        return 0 if restored else 1
     if command == "status":
         print(json.dumps({
             "container": container_running(CONTAINER),

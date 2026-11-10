@@ -1,0 +1,63 @@
+{
+  "profile": "glm53-pp4",
+  "gpu": null,
+  "gpus": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "aliases": [
+    "glm53-pp4",
+    "glm-5.3-flash",
+    "glm53",
+    "glm-5.3"
+  ],
+  "compatibility_group": "glm53-external-pp4",
+  "validated": true,
+  "validation": {
+    "status": "passed",
+    "notes": "Cold 32K/128K/262K prefill measured with 20 Hz NVML. Instantaneous peaks reached 287 W; worst rolling 5 s average was 146.2 W. NVML enforced limit 180 W, power-management mode enabled; SW Power Capping counters advanced.",
+    "power_evidence": "/home/ffard/glm53-test/power-trace-final.jsonl"
+  },
+  "evidence": {
+    "image": "glm53-pinned:local",
+    "engine_commit": "819146023facb31c04f1f8512e52464835a10d40",
+    "recipe": "v1.8.0"
+  },
+  "runtime": {
+    "kind": "glm53-managed",
+    "container": "glm53-flash-test",
+    "gpus": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "health": "http://127.0.0.1:8001/health",
+    "port": 8001,
+    "helper": "/usr/local/libexec/glm53-runtime",
+    "env": {
+      "MAX_BATCHED": "2312",
+      "MAX_SEQS": "4"
+    }
+  },
+  "launch": {
+    "model_name": "glm-5.3-flash",
+    "model_engine": "Morrowmake",
+    "model_format": "pytorch",
+    "model_size_in_billions": 753,
+    "quantization": "none",
+    "replica": 1,
+    "n_gpu": null,
+    "device": "cpu",
+    "endpoint": "http://127.0.0.1:8001",
+    "max_model_len": 262144,
+    "served_model_name": "glm-5.3-flash",
+    "model_path": "/var/lib/xinference/external-models/glm53-pp4-marker"
+  },
+  "env": {},
+  "model_family": "glm-5.3",
+  "display_model_name": "glm-5.3-flash",
+  "disabled": false
+}

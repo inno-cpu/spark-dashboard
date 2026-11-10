@@ -1,27 +1,76 @@
 {
-  "source": "nvidia-smi --query-gpu=index,power.draw --format=csv,noheader sampled every 2s during managed GLM generation",
-  "limit_w": 180,
-  "action": "Stopped GLM, restored Qwen, disabled profile",
-  "measured_at": "2026-11-10T00:14:00Z",
-  "samples": [
-    {
-      "context": 32768,
-      "result": "brief 3 W transient",
-      "max_batch": 2312,
-      "max_observed_w": 183.23
+  "prometheus_netdata_average": {
+    "managed_2352_2356_max_w": 177.3333333,
+    "alerts": [],
+    "original_1320_1327_max_w": 194.0
+  },
+  "trace": {
+    "windows": [
+      {
+        "name": "32K cold",
+        "start": "2026-11-10T03:25:56Z",
+        "avg5s_max_w": 136.051,
+        "end": "2026-11-10T03:26:17Z",
+        "inst_max_w": 278.863
+      },
+      {
+        "name": "128K cold",
+        "start": "2026-11-10T03:26:27Z",
+        "avg5s_max_w": 146.217,
+        "end": "2026-11-10T03:27:04Z",
+        "inst_max_w": 287.35
+      },
+      {
+        "name": "262K cold",
+        "start": "2026-11-10T03:27:11Z",
+        "avg5s_max_w": 146.217,
+        "end": "2026-11-10T03:27:57Z",
+        "inst_max_w": 287.35
+      }
+    ],
+    "instantaneous_max_w": 287.35,
+    "path": "power-trace-final.jsonl",
+    "guard_trips": 0,
+    "guard": "rolling 5 s mean > 185 W stops container",
+    "sample_hz": 20
+  },
+  "date_utc": "2026-11-10T03:55:00Z",
+  "nvml": {
+    "default_w": 250,
+    "supported_throttle_mask": "0x7ff",
+    "enforced_w": 180,
+    "perf_state": 0,
+    "limit_w": 180,
+    "min_w": 100,
+    "measurement": "nvmlDeviceGetPowerUsage is instantaneous; nvidia-smi Average Power Draw is N/A",
+    "power_management_mode": 1,
+    "max_w": 250
+  },
+  "capping_counter_delta_us": {
+    "gpu1": 3914009,
+    "gpu2": 102688,
+    "gpu0": 228432,
+    "gpu3": 142443
+  },
+  "benchmarks": {
+    "managed_32k": {
+      "completion_tokens": 512,
+      "ttft_s": 0.7472,
+      "decode_tps": 116.751
     },
-    {
-      "context": "128000/256000",
-      "result": "sustained >200 W on multiple GPUs",
-      "max_batch": 2312,
-      "max_observed_w": 267.34
+    "managed_128k": {
+      "completion_tokens": 512,
+      "ttft_s": 1.0145,
+      "decode_tps": 83.853,
+      "cold_prefill_ttft_s": 20.0305
     },
-    {
-      "context": 131072,
-      "max_seqs": 1,
-      "result": "low-batch mitigation failed",
-      "max_batch": 512,
-      "max_observed_w": 260.84
+    "managed_262k": {
+      "completion_tokens": 512,
+      "ttft_s": 1.5226,
+      "decode_tps": 94.374,
+      "cold_prefill_ttft_s": 28.9938
     }
-  ]
+  },
+  "schema": "glm53-power-resolution-v1",
+  "conclusion": "180 W is enforced in the averaged SW power-capping domain; instantaneous samples exceed it. No sustained 5 s mean above 185 W. Original 185 W was a sparse observation during cached decode."
 }

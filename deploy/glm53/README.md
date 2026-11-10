@@ -1,5 +1,7 @@
-# GLM-5.3-Flash PP4 integration (disabled)
+# GLM-5.3-Flash PP4 integration
 
-This directory is the deployment copy of the managed GLM profile and runtime.
+The profile is enabled. The 180 W policy is an averaged/firmware cap, not an instantaneous cap.
 
-GLM is **disabled** because 128K prefill exceeded the 180 W per-GPU limit (260-267 W). Qwen was restored. See REPORT.md.
+Native Xinference family: glm-5.3-flash (model_family glm-5.3), engine Morrowmake.
+
+See REPORT.md and power-evidence.json. Qwen is the active workload; the managed profile was switch-tested.
