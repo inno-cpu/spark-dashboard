@@ -1,0 +1,172 @@
+[
+  {
+    "ttft_s": 1.6142,
+    "total_s": 7.3934,
+    "decode_s": 5.7792,
+    "completion_tokens": 512,
+    "decode_tps": 88.594,
+    "usage": {
+      "prompt_tokens": 261572,
+      "total_tokens": 262084,
+      "completion_tokens": 512
+    },
+    "finish_reason": "length",
+    "sha": "906a20e66025c069bb5d3f68eed670f12b86853cb120295531d678b67f1a751f",
+    "head": "The user has sent a massive repeated prompt asking me to read \"telemetry notes\" and diagnose a bottleneck in a GPU serve",
+    "rep": 0,
+    "drafts": {
+      "vllm:spec_decode_num_drafts_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 146.0
+    },
+    "accepted": {
+      "vllm:spec_decode_num_accepted_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 369.0
+    },
+    "draft_tokens": {
+      "vllm:spec_decode_num_draft_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 908.0
+    },
+    "accepted_pos": {
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"0\"}": 117.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"1\"}": 88.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"2\"}": 62.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"3\"}": 41.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"4\"}": 27.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"5\"}": 18.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"6\"}": 16.0
+    }
+  },
+  {
+    "ttft_s": 1.6868,
+    "total_s": 7.3923,
+    "decode_s": 5.7055,
+    "completion_tokens": 512,
+    "decode_tps": 89.739,
+    "usage": {
+      "prompt_tokens": 261572,
+      "total_tokens": 262084,
+      "completion_tokens": 512
+    },
+    "finish_reason": "length",
+    "sha": "5f8fbe8575db78ef8b75b1c46b24d21eb063c90a0bbfde5da11328cd8c12baa0",
+    "head": "The user has sent a massive repeated prompt asking me to read \"telemetry notes\" and diagnose a bottleneck in a GPU serve",
+    "rep": 1,
+    "drafts": {
+      "vllm:spec_decode_num_drafts_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 144.0
+    },
+    "accepted": {
+      "vllm:spec_decode_num_accepted_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 367.0
+    },
+    "draft_tokens": {
+      "vllm:spec_decode_num_draft_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 880.0
+    },
+    "accepted_pos": {
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"0\"}": 107.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"1\"}": 86.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"2\"}": 66.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"3\"}": 39.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"4\"}": 29.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"5\"}": 24.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"6\"}": 16.0
+    }
+  },
+  {
+    "ttft_s": 1.7795,
+    "total_s": 7.5564,
+    "decode_s": 5.7768,
+    "completion_tokens": 512,
+    "decode_tps": 88.63,
+    "usage": {
+      "prompt_tokens": 261572,
+      "total_tokens": 262084,
+      "completion_tokens": 512
+    },
+    "finish_reason": "length",
+    "sha": "906a20e66025c069bb5d3f68eed670f12b86853cb120295531d678b67f1a751f",
+    "head": "The user has sent a massive repeated prompt asking me to read \"telemetry notes\" and diagnose a bottleneck in a GPU serve",
+    "rep": 2,
+    "drafts": {
+      "vllm:spec_decode_num_drafts_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 146.0
+    },
+    "accepted": {
+      "vllm:spec_decode_num_accepted_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 369.0
+    },
+    "draft_tokens": {
+      "vllm:spec_decode_num_draft_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 908.0
+    },
+    "accepted_pos": {
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"0\"}": 117.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"1\"}": 88.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"2\"}": 62.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"3\"}": 41.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"4\"}": 27.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"5\"}": 18.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"6\"}": 16.0
+    }
+  },
+  {
+    "ttft_s": 1.6361,
+    "total_s": 7.3863,
+    "decode_s": 5.7503,
+    "completion_tokens": 512,
+    "decode_tps": 89.039,
+    "usage": {
+      "prompt_tokens": 261572,
+      "total_tokens": 262084,
+      "completion_tokens": 512
+    },
+    "finish_reason": "length",
+    "sha": "906a20e66025c069bb5d3f68eed670f12b86853cb120295531d678b67f1a751f",
+    "head": "The user has sent a massive repeated prompt asking me to read \"telemetry notes\" and diagnose a bottleneck in a GPU serve",
+    "rep": 3,
+    "drafts": {
+      "vllm:spec_decode_num_drafts_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 146.0
+    },
+    "accepted": {
+      "vllm:spec_decode_num_accepted_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 369.0
+    },
+    "draft_tokens": {
+      "vllm:spec_decode_num_draft_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 908.0
+    },
+    "accepted_pos": {
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"0\"}": 117.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"1\"}": 88.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"2\"}": 62.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"3\"}": 41.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"4\"}": 27.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"5\"}": 18.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"6\"}": 16.0
+    }
+  },
+  {
+    "ttft_s": 1.7541,
+    "total_s": 7.4838,
+    "decode_s": 5.7297,
+    "completion_tokens": 512,
+    "decode_tps": 89.36,
+    "usage": {
+      "prompt_tokens": 261572,
+      "total_tokens": 262084,
+      "completion_tokens": 512
+    },
+    "finish_reason": "length",
+    "sha": "906a20e66025c069bb5d3f68eed670f12b86853cb120295531d678b67f1a751f",
+    "head": "The user has sent a massive repeated prompt asking me to read \"telemetry notes\" and diagnose a bottleneck in a GPU serve",
+    "rep": 4,
+    "drafts": {
+      "vllm:spec_decode_num_drafts_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 146.0
+    },
+    "accepted": {
+      "vllm:spec_decode_num_accepted_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 369.0
+    },
+    "draft_tokens": {
+      "vllm:spec_decode_num_draft_tokens_total{engine=\"0\",model_name=\"glm-5.3-flash\"}": 908.0
+    },
+    "accepted_pos": {
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"0\"}": 117.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"1\"}": 88.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"2\"}": 62.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"3\"}": 41.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"4\"}": 27.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"5\"}": 18.0,
+      "vllm:spec_decode_num_accepted_tokens_per_pos_total{engine=\"0\",model_name=\"glm-5.3-flash\",position=\"6\"}": 16.0
+    }
+  }
+]

@@ -10,11 +10,12 @@
       ],
       "gpu": "GPU-c8604bcf-1393-0e7b-3394-cb5abd29cde0",
       "kind": "xinference",
-      "max_ctx": 163840,
+      "max_ctx": 262144,
       "model_name": "qwen38-autoround",
       "model_uid": "qwen38-gpu0",
       "name": "gpu0",
-      "url": "http://127.0.0.1:9997"
+      "url": "http://127.0.0.1:9997",
+      "tokenize_url": "http://127.0.0.1:8001/tokenize"
     },
     {
       "aliases": [

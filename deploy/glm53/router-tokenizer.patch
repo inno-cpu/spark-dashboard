@@ -1,0 +1,95 @@
+--- /home/ffard/glm53-test/router.py.pre-tokenizer	2026-11-09 05:24:43.410664542 +0000
++++ /opt/hyperqwen-control/router/router.py	2026-11-10 04:33:18.831976178 +0000
+@@ -266,28 +266,51 @@
+ 
+ 
+ def _exact_tokens(text: str, key: str) -> Optional[int]:
+-    """Ask a backend for the exact token count. Returns None when unavailable."""
++    """Ask a backend's real tokenizer for the exact count.
++
++    Xinference's /tokenize returns 405. A backend may publish an explicit
++    tokenize_url (the GLM external engine does); otherwise fall back to the
++    backend URL and let the caller use the documented pessimistic estimate.
++    """
+     if not text:
+         return 0
+-    h = str(hash(text))
+-    if h in _TOK_CACHE:
+-        return _TOK_CACHE[h]
+-    try:
+-        import urllib.request
+-
+-        body = json.dumps({"model": (b.model_uid or "qwen3.8-27b"), "prompt": text}).encode()
+-        req = urllib.request.Request(f"{BACKENDS[0]['url']}/tokenize", data=body,
+-                                     headers={"Authorization": f"Bearer {key}",
+-                                              "Content-Type": "application/json"}, method="POST")
+-        with urllib.request.urlopen(req, timeout=4) as r:
+-            doc = json.loads(r.read().decode("utf-8"))
+-        n = int(doc.get("count") or len(doc.get("tokens") or []))
+-        if len(_TOK_CACHE) >= _TOK_MAX:
+-            _TOK_CACHE.clear()
+-        _TOK_CACHE[h] = n
+-        return n
+-    except Exception:  # noqa: BLE001
+-        return None
++    import urllib.request
++
++    seen = set()
++    candidates = []
++    for b in BACKENDS:
++        tokenize_url = str(b.get("tokenize_url") or "").rstrip("/")
++        if not tokenize_url:
++            tokenize_url = str(b.get("url") or "").rstrip("/") + "/tokenize"
++        model = b.get("resolved_model_name") or b.get("model_name") or b.get("model_uid") or "qwen3.8-27b"
++        candidates.append((tokenize_url, model))
++    # The external GLM engine publishes /tokenize; this remains harmless when
++    # GLM is stopped because the request simply fails and we use the fallback.
++    candidates.append(("http://127.0.0.1:8001/tokenize", "glm-5.3-flash"))
++    for tokenize_url, model in candidates:
++        if (tokenize_url, model) in seen:
++            continue
++        seen.add((tokenize_url, model))
++        h = f"{tokenize_url}|{model}|{text}"
++        if h in _TOK_CACHE:
++            return _TOK_CACHE[h]
++        try:
++            body = json.dumps({"model": model, "prompt": text}).encode()
++            req = urllib.request.Request(
++                tokenize_url, data=body,
++                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
++                method="POST",
++            )
++            with urllib.request.urlopen(req, timeout=4) as r:
++                doc = json.loads(r.read().decode("utf-8"))
++            n = int(doc.get("count") or len(doc.get("tokens") or []))
++            if len(_TOK_CACHE) >= _TOK_MAX:
++                _TOK_CACHE.clear()
++            _TOK_CACHE[h] = n
++            return n
++        except Exception:  # noqa: BLE001
++            continue
++    return None
+ 
+ 
+ def need_tokens(payload: Any) -> int:
+@@ -307,8 +330,10 @@
+     smallest = min((b["max_ctx"] for b in BACKENDS if b.get("max_ctx")), default=65536)
+     if pessimistic + maxtok + CTX_MARGIN <= smallest:
+         return pessimistic + maxtok + CTX_MARGIN
+-    # /tokenize is not exposed by this Xinference build (405); keep the documented
+-    # pessimistic estimate rather than calling a dead endpoint per request.
++    exact = _exact_tokens(text, "router")
++    if exact is not None:
++        return exact + maxtok + CTX_MARGIN
++    # No working tokenizer: keep the documented pessimistic bound.
+     return pessimistic + maxtok + CTX_MARGIN
+ 
+ 
+@@ -413,6 +438,7 @@
+     cycles: int = 0
+     router_waiting: int = 0
+     max_ctx_seen: Optional[int] = None
++    tokenize_url: Optional[str] = None
+     ctx_rejections: int = 0
+     last_error: Optional[str] = None
+ 
