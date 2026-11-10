@@ -1,0 +1,27 @@
+{
+  "source": "nvidia-smi --query-gpu=index,power.draw --format=csv,noheader sampled every 2s during managed GLM generation",
+  "limit_w": 180,
+  "action": "Stopped GLM, restored Qwen, disabled profile",
+  "measured_at": "2026-11-10T00:14:00Z",
+  "samples": [
+    {
+      "context": 32768,
+      "result": "brief 3 W transient",
+      "max_batch": 2312,
+      "max_observed_w": 183.23
+    },
+    {
+      "context": "128000/256000",
+      "result": "sustained >200 W on multiple GPUs",
+      "max_batch": 2312,
+      "max_observed_w": 267.34
+    },
+    {
+      "context": 131072,
+      "max_seqs": 1,
+      "result": "low-batch mitigation failed",
+      "max_batch": 512,
+      "max_observed_w": 260.84
+    }
+  ]
+}

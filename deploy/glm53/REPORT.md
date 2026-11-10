@@ -37,6 +37,12 @@ firmware, PCIe, SMFc, vLLM-runtime or checkpoint changes were made.
    surface. Chat, streaming, reasoning content, tools and OpenAI-compatible
    usage were exercised. The GLM model is one UID on CPU (`accelerators: []`)
    with the four GPUs represented by the external record.
+   **Identity limitation:** Xinference did not accept the standalone
+   `glm-5.3-flash` custom family, so the launch uses the existing
+   `qwen38-flashnext` Morrowmake family with `served_model_name`/UID set to
+   `glm-5.3-flash`/`glm53-pp4`. The adapter and telemetry expose GLM correctly,
+   but this is not an exact new `model_family` registration and must be closed
+   before unblocking the profile.
 2. **Managed four-GPU profile** — `/etc/xinference/profiles/glm53-pp4.json`,
    with `gpus: [0,1,2,3]`, runtime metadata and a disabled flag.
 3. **Runtime adapter** — `/usr/local/libexec/glm53-runtime` stops the two Qwen
@@ -95,6 +101,11 @@ Backups: `/home/ffard/glm53-integration-backup-20261109T224207Z`
 (root-owned, contains `/etc/xinference`, `/etc/hyperqwen-control`, Spark/Hqcc
 source, adapter, bridge, router and service drop-ins).
 
+- Source commit: `fecd4f615661453e1e66267183c747b9629d6722` on branch
+  `hqcc-flashnext-integration` in `/home/ffard/spark-dashboard`.
+- No GitHub push: no HTTPS/SSH credential is available. The commit is local.
+- Spark Docker-group grant used during the managed test was **reverted**;
+  `SupplementaryGroups=video render hqcc` is back in place.
 - Source: `git -C /home/ffard/spark-dashboard log -1` (see commit hash in the
   handoff).
 - Binary backup: `/home/ffard/glm53-test/spark-dashboard.pre-integration`.
@@ -105,6 +116,19 @@ source, adapter, bridge, router and service drop-ins).
 - To remove the feature: restore those files, restore the Spark binary, reload
   systemd, restart `xinference`, `hyperqwen-router` and `spark-dashboard`;
   reload Qwen profiles. No GLM image/checkpoint deletion is required.
+
+## Definition-of-done status
+
+- [x] Existing Qwen mode preserved and restored (Qwen1 + Flash-Next READY).
+- [x] One logical four-GPU GLM record in bridge/Spark, verified UUID list.
+- [x] Native Morrowmake adapter path and router path exercised.
+- [x] Safe rollback from GLM switch; no GLM left running.
+- [ ] GLM reliably selectable at 262K: **blocked by sustained >180 W prefill**.
+- [ ] Exact `glm-5.3-flash` Xinference model-family registration: adapter uses
+  the existing Morrowmake family alias (see identity limitation).
+
+The correct production state is the current Mode A: GLM disabled, Qwen
+available. Enabling it would knowingly violate the host's 180 W safety limit.
 
 ## Files
 
