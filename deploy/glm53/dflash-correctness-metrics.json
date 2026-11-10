@@ -1,0 +1,28 @@
+{
+  "accepted_tokens": 347,
+  "decode_s": 6.5617,
+  "prompt_sha256": "fe7c74cac6b6e8ba0d10e13fe3c02d358cfe680006e77dac16d77ddaf7e36bf6",
+  "accepted_pos0": 129,
+  "target_only_unique_hashes": 1,
+  "tps": 78.029,
+  "first_divergence_target_token": 2661,
+  "draft_tokens": 942,
+  "completion_tokens": 512,
+  "drafts": 170,
+  "prompt_tokens": 261572,
+  "target_only_runs": 5,
+  "acceptance_rate_pct": 36.8365,
+  "accepted_step_rate_pct": 75.882,
+  "first_divergence_dflash_token": 3208,
+  "dflash_unique_hashes": 2,
+  "target_top_logprobs": [
+    "given -1.3412604331970215",
+    "past -1.3412604331970215",
+    "sent -1.3412604331970215"
+  ],
+  "divergence_target_text": " given",
+  "divergence_dflash_text": " sent",
+  "text_sha256": "8e13fd98c542e16c98f8bbb1202aabcae80714a07f145003ae608027c70f166e",
+  "mean_acceptance_length": 3.0412,
+  "mode": "dflash"
+}

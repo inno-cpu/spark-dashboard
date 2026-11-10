@@ -236,6 +236,10 @@ def start_glm(allow_disabled: bool = False) -> int:
     runtime_cfg = json.loads(GLM_PROFILE.read_text()).get("runtime") or {}
     for key, value in (runtime_cfg.get("env") or {}).items():
         env[str(key)] = str(value)
+    spec_mode = os.environ.get("GLM53_SPEC_MODE", "dflash")
+    if spec_mode not in ("dflash", "none", "mtp"):
+        log(f"invalid GLM53_SPEC_MODE={spec_mode}")
+        return 2
     args = [
         "run", "-d", "--name", CONTAINER,
         "--label", "com.hyperqwen.glm53=managed",
@@ -255,7 +259,7 @@ def start_glm(allow_disabled: bool = False) -> int:
         "-v", f"{ROOT}/models/GLM-5.3-Flash-W4A16-MTP:/models/GLM-5.3-Flash-W4A16-MTP:ro",
         "-v", f"{ROOT}/models/GLM-5.3-Flash-DFlash2:/models/GLM-5.3-Flash-DFlash2:ro",
         "-v", f"{ROOT}/cache:/cache",
-        IMAGE, "/recipe/serve.sh", "dflash",
+        IMAGE, "/recipe/serve.sh", spec_mode,
     ]
     try:
         docker(*args, check=True, timeout=120)
