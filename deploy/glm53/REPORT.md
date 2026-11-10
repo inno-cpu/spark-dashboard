@@ -196,7 +196,8 @@ returned valid responses; the router served the logical model
 
 ## 7. Source and rollback
 
-- Local commit: see `git -C /home/ffard/spark-dashboard log -1`.
+- Local commit: `1db825a05d33bc255f002501dc2493d5299bb3cc`
+  (previous safety/guard source: `f56d962f7d9dc6ac795f55598ff75fcaef51fb96`).
 - Branch: `hqcc-flashnext-integration`.
 - No GitHub push (no credentials).
 - Backup: `/home/ffard/glm53-integration-backup-20261109T224207Z`

@@ -1,0 +1,27 @@
+{
+  "checked_at": "2026-11-10T03:55:00Z",
+  "glm_profile": "enabled",
+  "native_family_registered": true,
+  "github_push": false,
+  "glm_active": false,
+  "qwen": [
+    "qwen38-gpu1 READY 163840",
+    "qwen38-flashnext READY 262144"
+  ],
+  "switch_tested": "Qwen -> GLM -> Qwen",
+  "glm_model_uid": "glm53-pp4",
+  "power_limits_w": [
+    180,
+    180,
+    180,
+    180
+  ],
+  "glm_family": "glm-5.3",
+  "router": [
+    "gpu1 healthy",
+    "gpu2 healthy"
+  ],
+  "safety": "smfc, smfc-c80-monitor, cmp-gpu-guard, gpu-safety-backend, cmp-gpu-power-policy active",
+  "glm_model_name": "glm-5.3-flash",
+  "commit": "1db825a05d33bc255f002501dc2493d5299bb3cc"
+}
