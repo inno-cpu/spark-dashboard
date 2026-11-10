@@ -1590,6 +1590,40 @@ async fn host_router_drain(
 // ── model lab (Xinference is the manager; this is a surface over it) ────────
 const PROFILES_DIR: &str = "/etc/xinference/profiles";
 
+const GLM_HELPER: &str = "/usr/local/libexec/glm53-runtime";
+
+async fn run_glm_helper(action: &str) -> (u16, String) {
+    let command = tokio::process::Command::new(GLM_HELPER)
+        .arg(action)
+        .output();
+    match tokio::time::timeout(std::time::Duration::from_secs(1200), command).await {
+        Ok(Ok(output)) => {
+            let body = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let status = if output.status.success() { 200 } else { 502 };
+            if body.is_empty() {
+                (status, format!("{{\"error\":\"glm helper exited {}\"}}", output.status))
+            } else {
+                (status, body)
+            }
+        }
+        Ok(Err(error)) => (502, format!("{{\"error\":\"glm helper: {error}\"}}")),
+        Err(_) => (504, "{\"error\":\"glm helper timed out\"}".to_string()),
+    }
+}
+
+async fn xinference_has(uid: &str) -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    else { return false };
+    let Ok(response) = client.get("http://127.0.0.1:9997/v1/models").send().await else { return false };
+    let Ok(body) = response.json::<serde_json::Value>().await else { return false };
+    body.get("data")
+        .and_then(|rows| rows.as_array())
+        .map(|rows| rows.iter().any(|row| row.get("id").and_then(|value| value.as_str()) == Some(uid)))
+        .unwrap_or(false)
+}
+
 fn profile_catalog() -> Vec<serde_json::Value> {
     let mut profiles = Vec::new();
     let Ok(entries) = std::fs::read_dir(PROFILES_DIR) else {
@@ -1675,14 +1709,22 @@ async fn host_model_profiles() -> axum::response::Response {
                             serde_json::json!({
                                 "profile": config.get("profile"),
                                 "gpu": config.get("gpu"),
+                                "gpus": config.get("gpus"),
+                                "managed": config.get("runtime").is_some(),
+                                "disabled": config.get("disabled").and_then(|value| value.as_bool()).unwrap_or(false),
+                                "runtime": config.get("runtime"),
                                 "model_uid": config.get("model_uid"),
                                 "aliases": config.get("aliases"),
-                                "external": launch.get("device").and_then(|value| value.as_str()) == Some("cpu")
-                                    || launch.get("model_engine").and_then(|value| value.as_str()) == Some("Morrowmake"),
+                                "external": (launch.get("device").and_then(|value| value.as_str()) == Some("cpu")
+                                    || launch.get("model_engine").and_then(|value| value.as_str()) == Some("Morrowmake"))
+                                    && config.get("runtime").is_none(),
                                 "validated": config.get("validation").and_then(|v| v.get("xinference_inference")).and_then(|v| v.as_bool()).unwrap_or(false),
                                 "validation": config.get("validation"),
                                 "notes": config.get("validation").and_then(|v| v.get("notes")),
-                                "model_name": launch.get("model_name"),
+                                "model_name": config.get("display_model_name")
+                                    .or_else(|| launch.get("served_model_name"))
+                                    .or_else(|| launch.get("model_name")),
+                                "model_family": launch.get("model_name"),
                                 "max_model_len": launch.get("max_model_len"),
                                 "speculative": launch.get("speculative_config").and_then(|v| v.get("method")),
                                 "drafter": drafter,
@@ -1708,8 +1750,15 @@ async fn host_model_profiles() -> axum::response::Response {
                 "profile": document.get("profile"),
                 "validated": document.get("validated"),
                 "notes": document.get("notes"),
+                "gpus": document.get("gpus"),
+                "managed": document.get("runtime").is_some(),
+                "disabled": document.get("disabled").and_then(|value| value.as_bool()).unwrap_or(false),
+                "runtime": document.get("runtime"),
                 "model_uid": document.get("model_uid"),
-                "model_name": launch.get("model_name"),
+                "model_name": document.get("display_model_name")
+                    .or_else(|| launch.get("served_model_name"))
+                    .or_else(|| launch.get("model_name")),
+                "model_family": launch.get("model_name"),
                 "max_model_len": launch.get("max_model_len"),
                 "speculative": launch.get("speculative_config").and_then(|config| config.get("method")),
                 "drafter": launch.get("speculative_config").and_then(|config| config.get("model")),
@@ -1828,6 +1877,18 @@ async fn host_models() -> axum::response::Response {
                     .and_then(|rows| rows.as_array_mut())
                 {
                     for row in rows {
+                        // The bridge has already resolved the profile from the
+                        // engine's own UID/alias and applied context. Preserve
+                        // that identity: a managed GLM profile deliberately
+                        // uses the existing Morrowmake family name internally,
+                        // so a second name-only match would mislabel the Qwen
+                        // Flash-Next row as GLM.
+                        let existing = row.get("profile").and_then(|v| v.as_str()).map(str::to_string);
+                        if existing.as_deref().is_some_and(|name| {
+                            profiles.iter().any(|p| p.get("profile").and_then(|v| v.as_str()) == Some(name))
+                        }) {
+                            continue;
+                        }
                         let profile = profile_for_loaded(row, &profiles);
                         if let Some(profile) = profile {
                             row["profile"] = serde_json::Value::String(profile);
@@ -1901,12 +1962,51 @@ async fn host_model_load(
     {
         return (axum::http::StatusCode::BAD_REQUEST, "invalid profile name").into_response();
     }
+    let path = format!("{PROFILES_DIR}/{profile}.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return (axum::http::StatusCode::NOT_FOUND, "unknown profile").into_response();
+    };
+    let Ok(document) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "profile unreadable").into_response();
+    };
+    if document.get("disabled").and_then(|value| value.as_bool()).unwrap_or(false) {
+        let reason = document
+            .get("validation")
+            .and_then(|value| value.get("error"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("profile is disabled by the operator");
+        return (axum::http::StatusCode::CONFLICT, reason.to_string()).into_response();
+    }
+    if document.get("runtime").is_some() {
+        let (status, body) = run_glm_helper("start").await;
+        return (
+            axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::BAD_GATEWAY),
+            body,
+        ).into_response();
+    }
     let gpu: u32 = params
         .get("gpu")
         .and_then(|value| value.parse().ok())
         .unwrap_or(1);
     if gpu > 3 {
         return (axum::http::StatusCode::BAD_REQUEST, "gpu must be 0..3").into_response();
+    }
+    // A managed four-GPU profile must be shut down before a single-GPU
+    // profile can be selected. The helper restores the prior Qwen set.
+    if xinference_has("glm53-pp4").await {
+        let _ = run_glm_helper("stop").await;
+    }
+    let target_uid = if profile == "qwen38-flashnext-256k" {
+        "qwen38-flashnext".to_string()
+    } else {
+        format!("qwen38-gpu{gpu}")
+    };
+    if xinference_has(&target_uid).await {
+        return axum::Json(serde_json::json!({
+            "model_uid": target_uid,
+            "reused": true,
+            "detail": "target profile was restored by the managed switch"
+        })).into_response();
     }
     if let Some(owner) = gpu_occupant(gpu).await {
         return (
@@ -1915,13 +2015,6 @@ async fn host_model_load(
         )
             .into_response();
     }
-    let path = format!("{PROFILES_DIR}/{profile}.json");
-    let Ok(text) = std::fs::read_to_string(&path) else {
-        return (axum::http::StatusCode::NOT_FOUND, "unknown profile").into_response();
-    };
-    let Ok(document) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "profile unreadable").into_response();
-    };
     let mut payload = document.get("launch").cloned().unwrap_or_default();
     if let Some(env) = document.get("env").and_then(|value| value.as_object()) {
         payload["envs"] = serde_json::Value::Object(env.clone());
@@ -1974,6 +2067,13 @@ async fn host_model_unload(
     let Some(uid) = params.get("uid").filter(|value| !value.is_empty()) else {
         return (axum::http::StatusCode::BAD_REQUEST, "uid is required").into_response();
     };
+    if uid == "glm53-pp4" {
+        let (status, body) = run_glm_helper("stop").await;
+        return (
+            axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::BAD_GATEWAY),
+            body,
+        ).into_response();
+    }
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
         .build()

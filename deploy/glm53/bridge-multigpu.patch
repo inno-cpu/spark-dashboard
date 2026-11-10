@@ -1,0 +1,56 @@
+--- /home/ffard/glm53-test/spark_bridge.py.pre-integration	2026-11-08 07:52:52.958468342 +0000
++++ /opt/xinference/venv/lib/python3.14/site-packages/spark_bridge/__init__.py	2026-11-09 22:43:44.136145983 +0000
+@@ -126,8 +126,27 @@
+                 continue
+             gpu_index = spec.get("gpu_index")
+             gpu_index = int(gpu_index) if str(gpu_index).isdigit() else None
++            raw_indices = spec.get("gpu_indices")
++            if not isinstance(raw_indices, list):
++                raw_indices = [gpu_index] if gpu_index is not None else []
++            gpu_indices = []
++            for value in raw_indices:
++                try:
++                    gpu_indices.append(int(value))
++                except (TypeError, ValueError):
++                    pass
+             actual_uuid = uuids[gpu_index] if gpu_index is not None and gpu_index < len(uuids) else None
+             expected_uuid = spec.get("gpu_uuid")
++            gpu_uuids = spec.get("gpu_uuids")
++            if not isinstance(gpu_uuids, list):
++                gpu_uuids = []
++            gpu_uuids = [str(value) for value in gpu_uuids if value]
++            if not gpu_uuids:
++                for idx in gpu_indices:
++                    if idx < len(uuids):
++                        gpu_uuids.append(uuids[idx])
++            if not gpu_uuids and actual_uuid:
++                gpu_uuids = [actual_uuid]
+             available = False
+             served = spec.get("served_model")
+             error = None
+@@ -151,6 +170,8 @@
+                 "status": "READY" if available else "UNAVAILABLE",
+                 "accelerators": [],
+                 "gpu_index": gpu_index,
++                "gpu_indices": gpu_indices,
++                "gpu_uuids": gpu_uuids,
+                 "gpu_uuid": actual_uuid or expected_uuid,
+                 "gpu_uuid_verified": bool(actual_uuid and (not expected_uuid or actual_uuid == expected_uuid)),
+                 "memory_bytes": None,
+@@ -611,9 +632,13 @@
+     lines.append("# TYPE xinference_spark_bridge_external_available gauge")
+     lines.append(f"xinference_spark_bridge_external_available{_labels(base, {})} 1")
+     lines.append("# TYPE xinference_spark_bridge_external_gpu_uuid_info gauge")
+-    lines.append(
+-        f"xinference_spark_bridge_external_gpu_uuid_info{_labels(base, {'gpu_uuid': model.get('gpu_uuid') or '', 'gpu_index': str(model.get('gpu_index') or '')})} 1"
+-    )
++    uuids = model.get("gpu_uuids") or ([model.get("gpu_uuid")] if model.get("gpu_uuid") else [])
++    indices = model.get("gpu_indices") or ([model.get("gpu_index")] if model.get("gpu_index") is not None else [])
++    for position, uuid in enumerate(uuids):
++        index = indices[position] if position < len(indices) else ""
++        lines.append(
++            f"xinference_spark_bridge_external_gpu_uuid_info{_labels(base, {'gpu_uuid': str(uuid), 'gpu_index': str(index)})} 1"
++        )
+     return "\n".join(lines) + "\n"
+ class SparkBridge:
+     name = "spark-bridge"

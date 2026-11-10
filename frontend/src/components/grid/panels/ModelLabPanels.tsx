@@ -7,6 +7,9 @@ interface Profile {
   profile?: string
   validated?: boolean
   external?: boolean
+  managed?: boolean
+  disabled?: boolean
+  gpus?: number[]
   model_name?: string
   model_uid?: string
   max_model_len?: number
@@ -25,6 +28,8 @@ interface Model {
   gpu?: number | null
   gpu_index?: string | number
   gpu_uuid?: string
+  gpu_indices?: number[]
+  gpu_uuids?: string[]
   memory_bytes?: number
 }
 
@@ -59,6 +64,13 @@ export function ModelProfilesPanel() {
       const next: Record<number, string> = {}
       for (const model of body.models ?? []) {
         if (model.status !== 'READY') continue
+        const many = model.gpu_indices
+        if (Array.isArray(many) && many.length > 0) {
+          for (const item of many) {
+            if (Number.isFinite(Number(item))) next[Number(item)] = model.model_name ?? model.uid ?? 'model'
+          }
+          continue
+        }
         const raw = model.gpu_index ?? model.gpu
         const index = typeof raw === 'string' ? Number(raw) : raw
         if (typeof index === 'number' && Number.isFinite(index)) {
@@ -88,14 +100,18 @@ export function ModelProfilesPanel() {
 
   const launch = async (name: string) => {
     const profile = profiles.find((entry) => entry.profile === name)
-    const target = `GPU ${gpu}`
+    const multi = (profile?.gpus?.length ?? 0) > 1
+    const target = multi ? `GPUs ${(profile?.gpus ?? []).join(',')}` : `GPU ${gpu}`
     const detail = profile
       ? `${profile.model_name ?? 'model'}`
       : name
     if (!window.confirm(`Load ${name} (${detail}) on ${target}?`)) return
     setBusy(name)
     try {
-      const response = await fetch(`/api/models/load?profile=${encodeURIComponent(name)}&gpu=${gpu}`, { method: 'POST' })
+      const url = multi
+        ? `/api/models/load?profile=${encodeURIComponent(name)}`
+        : `/api/models/load?profile=${encodeURIComponent(name)}&gpu=${gpu}`
+      const response = await fetch(url, { method: 'POST' })
       if (!response.ok) throw new Error(await response.text())
     } catch (cause) {
       setError(cause instanceof Error ? cause.message.slice(0, 120) : 'launch failed')
@@ -134,18 +150,18 @@ export function ModelProfilesPanel() {
                 {formatProfileLabel(profile.profile)}
               </div>
               <div className="truncate text-[9px] text-zinc-500">
-                {profile.external ? 'external runtime · ' : ''}
+                {profile.managed ? '4-GPU managed · ' : profile.external ? 'external runtime · ' : ''}
                 {profile.model_name} · {profile.speculative ?? 'no spec'} · drafter {(profile.drafter ?? '').split('/').pop() || '—'}
               </div>
             </div>
             <button
               type="button"
-              disabled={busy === profile.profile || profile.external === true || occupied[gpu] !== undefined}
-              title={profile.external ? 'External runtime; not GPU-placeable' : occupied[gpu] ? `GPU ${gpu} already has ${occupied[gpu]}` : undefined}
+              disabled={profile.disabled === true || busy === profile.profile || (profile.external === true && !profile.managed) || ((profile.gpus?.length ?? 0) <= 1 && occupied[gpu] !== undefined)}
+              title={profile.disabled ? 'Blocked: 128k prefill exceeded the 180 W limit; see validation notes' : profile.managed ? 'Managed four-GPU switch; starts GLM and restores the saved Qwen set on stop' : profile.external ? 'External runtime; not GPU-placeable' : occupied[gpu] ? `GPU ${gpu} already has ${occupied[gpu]}` : undefined}
               onClick={() => void launch(profile.profile ?? '')}
               className="shrink-0 rounded border border-white/10 px-1.5 py-0.5 text-[9px] text-zinc-400 hover:border-white/25 hover:text-zinc-200 disabled:opacity-40"
             >
-              {busy === profile.profile ? 'loading…' : profile.external ? 'external' : occupied[gpu] ? 'gpu busy' : 'load'}
+              {profile.disabled ? 'blocked' : busy === profile.profile ? 'loading…' : profile.managed ? 'switch' : profile.external ? 'external' : occupied[gpu] ? 'gpu busy' : 'load'}
             </button>
           </div>
         ))}
@@ -198,7 +214,7 @@ export function ModelInventoryPanel() {
               )}
             </div>
             <div className="truncate text-[9px] text-zinc-500">
-              {model.model_name ?? model.uid ?? 'unknown model'} · {model.model_engine ?? 'engine n/a'} · {model.memory_bytes ? `${(model.memory_bytes / 1024 ** 3).toFixed(0)} GiB` : 'memory n/a'}
+              {model.model_name ?? model.uid ?? 'unknown model'} · {model.model_engine ?? 'engine n/a'} · {model.gpu_indices?.length ? `GPUs ${model.gpu_indices.join(',')}` : model.memory_bytes ? `${(model.memory_bytes / 1024 ** 3).toFixed(0)} GiB` : 'memory n/a'}
             </div>
           </div>
           <span className="shrink-0 text-[9px] text-zinc-500">{model.status ?? '?'}</span>

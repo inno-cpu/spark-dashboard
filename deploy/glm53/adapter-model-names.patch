@@ -1,0 +1,19 @@
+--- /home/ffard/glm53-test/core.py.pre-integration	2026-11-08 08:54:42.525708742 +0000
++++ /opt/xinference/venv/lib/python3.14/site-packages/xinference/model/llm/morrowmake/core.py	2026-11-09 22:43:44.132629843 +0000
+@@ -20,6 +20,7 @@
+ 
+     __engine_name__ = "Morrowmake"
+     __model_name__ = "qwen38-flashnext"
++    __model_names__ = ("qwen38-flashnext", "glm-5.3-flash", "glm-5.3")
+     supports_cache_salt = False
+     supports_tool_controls = True
+     allow_batch = False
+@@ -70,7 +71,7 @@
+     def match_json(cls, llm_family: Any, llm_spec: Any, quantization: str) -> bool:
+         name = getattr(llm_family, "model_name", "")
+         fmt = getattr(llm_spec, "model_format", "")
+-        return name == cls.__model_name__ and fmt == "pytorch"
++        return name in cls.__model_names__ and fmt == "pytorch"
+ 
+     @classmethod
+     def match(cls, llm_family: Any, llm_spec: Any, quantization: str) -> bool:

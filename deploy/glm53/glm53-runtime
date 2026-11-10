@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""Managed GLM-5.3-Flash PP4 runtime for the existing Spark Model Lab.
+
+This is a narrow runtime adapter, not a second GPU control plane. It uses the
+existing Xinference supervisor/API, the existing profiles and the existing
+Docker image. Spark calls it from the existing profile load/unload endpoint.
+
+Commands: start | stop | status
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+XINF = "http://127.0.0.1:9997"
+PROFILE_DIR = Path("/etc/xinference/profiles")
+STATE = Path("/var/lib/spark-dashboard/glm-switch-state.json")
+CONTAINER = "glm53-flash-test"
+FLASH_CONTAINER = "qwen38-flash-next-1x"
+GLM_UID = "glm53-pp4"
+GLM_PROFILE = PROFILE_DIR / "glm53-pp4.json"
+FLASH_PROFILE = PROFILE_DIR / "qwen38-flashnext-256k.json"
+QWEN_PROFILE = PROFILE_DIR / "qwen38-autoround-160k.json"
+ROOT = Path("/home/ffard/glm53-test")
+DOCKER = "/usr/bin/docker"
+IMAGE = "glm53-pinned:local"
+
+
+def log(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+def api(method: str, path: str, body: dict | None = None, timeout: float = 30.0):
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(
+        XINF + path,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            text = response.read().decode("utf-8", "replace")
+            return response.status, json.loads(text) if text else {}
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", "replace")
+    except Exception as exc:  # noqa: BLE001
+        return 0, f"{type(exc).__name__}: {exc}"
+
+
+def models() -> set[str]:
+    status, body = api("GET", "/v1/models", timeout=5)
+    if status != 200 or not isinstance(body, dict):
+        return set()
+    return {str(row.get("id")) for row in body.get("data", []) if isinstance(row, dict)}
+
+
+def wait_models(wanted: set[str], timeout: float) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        have = models()
+        if wanted <= have:
+            return True
+        time.sleep(3)
+    log(f"timed out waiting for models {sorted(wanted)}; have {sorted(models())}")
+    return False
+
+
+def docker(*args: str, check: bool = False, timeout: float = 60.0) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        [DOCKER, *args], capture_output=True, text=True, timeout=timeout
+    )
+    if check and result.returncode != 0:
+        raise RuntimeError(f"docker {' '.join(args)}: {result.stderr.strip()}")
+    return result
+
+
+def container_running(name: str) -> bool:
+    result = docker("inspect", "-f", "{{.State.Running}}", name)
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
+def wait_http(url: str, timeout: float) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as response:
+                if response.status == 200:
+                    return True
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(3)
+    return False
+
+
+def wait_gpu_free(timeout: float = 120.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=gpu_uuid", "--format=csv,noheader"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if not result.stdout.strip():
+            return True
+        time.sleep(3)
+    return False
+
+
+def load_profile(path: Path, uid: str, gpu: int | None) -> dict:
+    document = json.loads(path.read_text())
+    payload = dict(document.get("launch") or {})
+    payload["model_uid"] = uid
+    if gpu is not None:
+        payload["gpu_idx"] = [gpu]
+        payload["n_gpu"] = 1
+        payload.pop("device", None)
+    else:
+        payload.pop("gpu_idx", None)
+        payload["n_gpu"] = None
+        payload["device"] = "cpu"
+    return payload
+
+
+def save_state(active: set[str]) -> None:
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "qwen1": "qwen38-gpu1" in active,
+        "flashnext": "qwen38-flashnext" in active,
+        "saved_at": time.time(),
+    }
+    STATE.write_text(json.dumps(state, indent=2))
+
+
+def restore_qwen() -> bool:
+    if not STATE.exists():
+        return True
+    state = json.loads(STATE.read_text())
+    ok = True
+    if state.get("qwen1") and "qwen38-gpu1" not in models():
+        payload = load_profile(QWEN_PROFILE, "qwen38-gpu1", 1)
+        status, body = api("POST", "/v1/models", payload, timeout=1800)
+        log(f"restore qwen1: {status} {str(body)[:300]}")
+        ok = ok and status == 200
+    if state.get("flashnext"):
+        if not container_running(FLASH_CONTAINER):
+            docker("start", FLASH_CONTAINER, check=True)
+        if not wait_http("http://127.0.0.1:8000/health", 300):
+            log("restore flashnext: container health timeout")
+            ok = False
+        elif "qwen38-flashnext" not in models():
+            payload = load_profile(FLASH_PROFILE, "qwen38-flashnext", None)
+            status, body = api("POST", "/v1/models", payload, timeout=300)
+            log(f"restore flashnext: {status} {str(body)[:300]}")
+            ok = ok and status == 200
+    wait_models({"qwen38-gpu1"} if state.get("qwen1") else set(), 300)
+    return ok
+
+
+def stop_glm() -> bool:
+    if GLM_UID in models():
+        status, body = api("DELETE", f"/v1/models/{GLM_UID}", timeout=300)
+        log(f"unload {GLM_UID}: {status} {str(body)[:300]}")
+    docker("stop", CONTAINER, timeout=180)
+    docker("rm", "-f", CONTAINER)
+    wait_gpu_free(180)
+    return True
+
+
+def start_glm() -> int:
+    profile_doc = json.loads(GLM_PROFILE.read_text())
+    if profile_doc.get("disabled"):
+        log("GLM profile is disabled: " + str((profile_doc.get("validation") or {}).get("error")))
+        return 2
+    if GLM_UID in models() and container_running(CONTAINER):
+        print(json.dumps({"uid": GLM_UID, "status": "READY", "already": True}))
+        return 0
+    active = models()
+    save_state(active)
+    log(f"saved state: {active}")
+    # Stop only the GPU-consuming inference models. Xinference stays running.
+    for uid in ("qwen38-gpu1", "qwen38-flashnext"):
+        if uid in models():
+            status, body = api("DELETE", f"/v1/models/{uid}", timeout=600)
+            log(f"unload {uid}: {status} {str(body)[:200]}")
+    if container_running(FLASH_CONTAINER):
+        docker("stop", FLASH_CONTAINER, timeout=120)
+    if not wait_gpu_free(180):
+        log("GPU processes remain after unload; refusing to start GLM")
+        restore_qwen()
+        return 1
+    docker("rm", "-f", CONTAINER)
+    env = {
+        "VENV": "/opt/venv",
+        "MODEL": "/models/GLM-5.3-Flash-W4A16-MTP",
+        "DFLASH_MODEL": "/models/GLM-5.3-Flash-DFlash2",
+        "CUDA_HOME": "/usr/local/cuda",
+        "HOST": "0.0.0.0",
+        "PORT": "8000",
+        "BOOT_CHECK": "0",
+        "RECIPE_BOOT_CHECK_OWNER": "managed",
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "RECIPE_CACHE_ROOT": "/cache",
+        "TMPDIR": "/cache/tmp",
+        "HOME": "/cache",
+        "USER": "ffard",
+        "LOGNAME": "ffard",
+        "XDG_CACHE_HOME": "/cache/.cache",
+        "HF_HOME": "/cache/huggingface",
+        "FLASHINFER_WORKSPACE_BASE": "/cache",
+        "TORCHINDUCTOR_CACHE_DIR": "/cache/torchinductor",
+        "TRITON_CACHE_DIR": "/cache/.triton/cache",
+        "TORCH_EXTENSIONS_DIR": "/cache/.cache/torch_extensions",
+        "VLLM_CACHE_ROOT": "/cache/.cache/vllm",
+        "TILELANG_CACHE_DIR": "/cache/.tilelang/cache",
+        "TILELANG_TMP_DIR": "/cache/.tilelang/cache/tmp",
+        "CUDA_CACHE_PATH": "/cache/.nv/ComputeCache",
+        "LAYOUT": "pp4",
+        "PP": "4",
+        "TP": "1",
+        "VLLM_PP_LAYER_PARTITION": "9,12,12,12",
+        "MAX_LEN": "262144",
+        "MAX_SEQS": "4",
+        "MM_CAP": "1",
+        "P2P": "off",
+        "GPU_UTIL": "0.95",
+        "CUDA_VISIBLE_DEVICES": "0,1,2,3",
+    }
+    runtime_cfg = json.loads(GLM_PROFILE.read_text()).get("runtime") or {}
+    for key, value in (runtime_cfg.get("env") or {}).items():
+        env[str(key)] = str(value)
+    args = [
+        "run", "-d", "--name", CONTAINER,
+        "--label", "com.hyperqwen.glm53=managed",
+        "--user", "1000:1000", "--workdir", "/cache",
+        "--gpus", "all", "--shm-size", "16g",
+        "-p", "127.0.0.1:8001:8000",
+        "--entrypoint", "/bin/bash",
+    ]
+    for key, value in env.items():
+        args += ["-e", f"{key}={value}"]
+    args += [
+        "-v", f"{ROOT}/recipe/serve.sh:/recipe/serve.sh:ro",
+        "-v", f"{ROOT}/recipe/boot_check.py:/recipe/boot_check.py:ro",
+        "-v", f"{ROOT}/recipe/p2p_check.py:/recipe/p2p_check.py:ro",
+        "-v", f"{ROOT}/recipe/p2p_check.sh:/recipe/p2p_check.sh:ro",
+        "-v", f"{ROOT}/recipe/p2p_probe.cu:/recipe/p2p_probe.cu:ro",
+        "-v", f"{ROOT}/models/GLM-5.3-Flash-W4A16-MTP:/models/GLM-5.3-Flash-W4A16-MTP:ro",
+        "-v", f"{ROOT}/models/GLM-5.3-Flash-DFlash2:/models/GLM-5.3-Flash-DFlash2:ro",
+        "-v", f"{ROOT}/cache:/cache",
+        IMAGE, "/recipe/serve.sh", "dflash",
+    ]
+    try:
+        docker(*args, check=True, timeout=120)
+    except Exception as exc:  # noqa: BLE001
+        log(f"docker start failed: {exc}")
+        restore_qwen()
+        return 1
+    if not wait_http("http://127.0.0.1:8001/health", 900):
+        log("GLM health timeout")
+        docker("logs", "--tail", "100", CONTAINER)
+        stop_glm()
+        restore_qwen()
+        return 1
+    payload = load_profile(GLM_PROFILE, GLM_UID, None)
+    status, body = api("POST", "/v1/models", payload, timeout=300)
+    log(f"register GLM adapter: {status} {str(body)[:300]}")
+    if status != 200 or not wait_models({GLM_UID}, 180):
+        stop_glm()
+        restore_qwen()
+        return 1
+    print(json.dumps({"uid": GLM_UID, "status": "READY", "container": CONTAINER}))
+    return 0
+
+
+def main() -> int:
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if command == "start":
+        return start_glm()
+    if command == "stop":
+        if "glm53-pp4" in models() or container_running(CONTAINER):
+            stop_glm()
+        restore_qwen()
+        print(json.dumps({"uid": GLM_UID, "status": "STOPPED", "restored": True}))
+        return 0
+    if command == "status":
+        print(json.dumps({
+            "container": container_running(CONTAINER),
+            "model_ready": GLM_UID in models(),
+            "models": sorted(models()),
+            "state": json.loads(STATE.read_text()) if STATE.exists() else None,
+        }))
+        return 0
+    print(__doc__, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

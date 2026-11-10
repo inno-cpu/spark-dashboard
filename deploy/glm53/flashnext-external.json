@@ -1,0 +1,45 @@
+{
+  "engines": [
+    {
+      "uid": "qwen38-flashnext",
+      "model_name": "qwen3.8-flash-next",
+      "endpoint": "http://localhost:8000",
+      "served_model": "qwen3.8-flash-next",
+      "gpu_index": 2,
+      "gpu_uuid": "GPU-96962457-f658-64eb-c18c-897f3fdaff9b",
+      "engine": "Morrowmake",
+      "type": "vllm",
+      "model_format": "pytorch",
+      "quantization": "none",
+      "context_length": 262144,
+      "dedupe_model_name": "qwen38-flashnext"
+    },
+    {
+      "uid": "glm53-pp4",
+      "model_name": "glm-5.3-flash",
+      "endpoint": "http://127.0.0.1:8001",
+      "served_model": "glm-5.3-flash",
+      "gpu_index": 0,
+      "gpu_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "gpu_uuids": [
+        "GPU-c8604bcf-1393-0e7b-3394-cb5abd29cde0",
+        "GPU-2a0a72ec-b29d-d06f-5d35-a7c589015280",
+        "GPU-96962457-f658-64eb-c18c-897f3fdaff9b",
+        "GPU-49b40139-9d41-870f-9194-e4a5a6a93d3a"
+      ],
+      "gpu_uuid": "GPU-c8604bcf-1393-0e7b-3394-cb5abd29cde0",
+      "engine": "Morrowmake",
+      "type": "vllm",
+      "model_format": "pytorch",
+      "quantization": "none",
+      "context_length": 262144,
+      "dedupe_model_name": "glm-5.3-flash",
+      "managed": true
+    }
+  ]
+}

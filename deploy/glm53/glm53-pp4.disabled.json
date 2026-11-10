@@ -1,0 +1,63 @@
+{
+  "profile": "glm53-pp4",
+  "gpu": null,
+  "gpus": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "aliases": [
+    "glm53-pp4",
+    "glm-5.3-flash",
+    "glm53",
+    "glm-5.3"
+  ],
+  "compatibility_group": "glm53-external-pp4",
+  "validated": false,
+  "validation": {
+    "notes": "Validated 262k. 9,12,12,12 at MAX_BATCHED=2312 exceeded 180W during 128k prefill (up to 267W); low-batch candidate under safety test. Stage-0 load-time allocator warnings retained.",
+    "status": "blocked",
+    "error": "Blocked by power safety: 128k prefill exceeded the 180 W limit (peaks 260-267 W on individual GPUs) in both 9,12,12,12 and 8,13,12,12; low MAX_BATCHED=512 still peaked at 260 W. Qwen was restored; no GLM deployment."
+  },
+  "evidence": {
+    "image": "glm53-pinned:local",
+    "engine_commit": "819146023facb31c04f1f8512e52464835a10d40",
+    "recipe": "v1.8.0"
+  },
+  "runtime": {
+    "kind": "glm53-managed",
+    "container": "glm53-flash-test",
+    "gpus": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "health": "http://127.0.0.1:8001/health",
+    "port": 8001,
+    "helper": "/usr/local/libexec/glm53-runtime",
+    "env": {
+      "MAX_BATCHED": "512",
+      "MAX_SEQS": "1"
+    }
+  },
+  "launch": {
+    "model_name": "qwen38-flashnext",
+    "model_engine": "Morrowmake",
+    "model_format": "pytorch",
+    "model_size_in_billions": 125,
+    "quantization": "none",
+    "replica": 1,
+    "n_gpu": null,
+    "device": "cpu",
+    "endpoint": "http://127.0.0.1:8001",
+    "max_model_len": 262144,
+    "served_model_name": "glm-5.3-flash",
+    "model_path": "/var/lib/xinference/external-models/glm53-pp4-marker"
+  },
+  "env": {},
+  "model_family": "glm-5.3",
+  "display_model_name": "glm-5.3-flash",
+  "disabled": true
+}
