@@ -17,7 +17,7 @@
   "validated": true,
   "validation": {
     "status": "passed",
-    "notes": "Cold 32K/128K/262K prefill measured with 20 Hz NVML. Instantaneous peaks reached 287 W; worst rolling 5 s average was 146.2 W. NVML enforced limit 180 W, power-management mode enabled; SW Power Capping counters advanced.",
+    "notes": "9,12,12,12 + adaptive [7,5,3] retained. Fixed depth3: structured118.7/code109.3/prose88.4, rejected.",
     "power_evidence": "/home/ffard/glm53-test/power-trace-final.jsonl"
   },
   "evidence": {
